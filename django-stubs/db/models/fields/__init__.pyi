@@ -3,7 +3,7 @@ import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, time, timedelta
 from datetime import datetime as real_datetime
-from typing import Any, ClassVar, Generic, Protocol, TypeAlias, overload, type_check_only
+from typing import Any, ClassVar, Generic, Literal, Protocol, TypeAlias, overload, type_check_only
 
 from django import forms
 from django.core.checks import CheckMessage
@@ -47,11 +47,13 @@ _ErrorMessagesMapping: TypeAlias = Mapping[str, _StrOrPromise]
 _ErrorMessagesDict: TypeAlias = dict[str, _StrOrPromise]
 
 # __set__ value type
-_ST = TypeVar("_ST", contravariant=True)
+_ST = TypeVar("_ST", contravariant=True, default=Any)
 # __get__ return type
-_GT = TypeVar("_GT", covariant=True)
+_GT = TypeVar("_GT", covariant=True, default=Any)
+# null type
+_NT = TypeVar("_NT", Literal[True], Literal[False], default=Literal[False])
 
-class Field(RegisterLookupMixin, Generic[_ST, _GT]):
+class Field(RegisterLookupMixin, Generic[_ST, _GT, _NT]):
     """
     Typing model fields.
 
@@ -159,7 +161,7 @@ class Field(RegisterLookupMixin, Generic[_ST, _GT]):
         max_length: int | None = None,
         unique: bool = False,
         blank: bool = False,
-        null: bool = False,
+        null: _NT = False,
         db_index: bool = False,
         rel: ForeignObjectRel | None = None,
         default: Any = ...,
@@ -176,15 +178,20 @@ class Field(RegisterLookupMixin, Generic[_ST, _GT]):
         validators: Iterable[_ValidatorCallable] = (),
         error_messages: _ErrorMessagesMapping | None = None,
         db_comment: str | None = None,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _ST | None = ...,
     ) -> None: ...
-    def __set__(self, instance: Any, value: _ST) -> None: ...
+    @overload
+    def __set__(self: Field[Any, Any, Literal[False]], instance: Any, value: _ST) -> None: ...
+    @overload
+    def __set__(self: Field[Any, Any, Literal[True]], instance: Any, value: _ST | None) -> None: ...
     # class access
     @overload
     def __get__(self, instance: None, owner: Any) -> _FieldDescriptor[Self]: ...
     # Model instance access
     @overload
-    def __get__(self, instance: Model, owner: Any) -> _GT: ...
+    def __get__(self: Field[Any, Any, Literal[False]], instance: Model, owner: Any) -> _GT: ...
+    @overload
+    def __get__(self: Field[Any, Any, Literal[True]], instance: Model, owner: Any) -> _GT | None: ...
     # non-Model instances
     @overload
     def __get__(self, instance: Any, owner: Any) -> Self: ...
@@ -271,7 +278,10 @@ class Field(RegisterLookupMixin, Generic[_ST, _GT]):
     def value_from_object(self, obj: Model) -> _GT: ...
     def slice_expression(self, expression: Expression, start: int, length: int | None) -> Func: ...
 
-class IntegerField(Field[_ST, _GT]):
+_ST_IntegerField = TypeVar("_ST_IntegerField", bound=float | int | str | Combinable, default=float | int | str | Combinable)
+_GT_IntegerField = TypeVar("_GT_IntegerField", bound=int, default=int)
+
+class IntegerField(Field[_ST_IntegerField, _GT_IntegerField, _NT]):
     _pyi_private_set_type: float | int | str | Combinable
     _pyi_private_get_type: int
     _pyi_lookup_exact_type: str | int
@@ -279,26 +289,32 @@ class IntegerField(Field[_ST, _GT]):
 class PositiveIntegerRelDbTypeMixin:
     def rel_db_type(self, connection: BaseDatabaseWrapper) -> str: ...
 
-class SmallIntegerField(IntegerField[_ST, _GT]): ...
+class SmallIntegerField(IntegerField[_ST_IntegerField, _GT_IntegerField, _NT]): ...
 
-class BigIntegerField(IntegerField[_ST, _GT]):
+class BigIntegerField(IntegerField[_ST_IntegerField, _GT_IntegerField, _NT]):
     MAX_BIGINT: ClassVar[int]
 
-class PositiveIntegerField(PositiveIntegerRelDbTypeMixin, IntegerField[_ST, _GT]):
+class PositiveIntegerField(PositiveIntegerRelDbTypeMixin, IntegerField[_ST_IntegerField, _GT_IntegerField, _NT]): ...
     integer_field_class: type[IntegerField]
 
-class PositiveSmallIntegerField(PositiveIntegerRelDbTypeMixin, SmallIntegerField[_ST, _GT]):
+class PositiveSmallIntegerField(PositiveIntegerRelDbTypeMixin, SmallIntegerField[_ST_IntegerField, _GT_IntegerField, _NT]): ...
     integer_field_class: type[SmallIntegerField]
 
-class PositiveBigIntegerField(PositiveIntegerRelDbTypeMixin, BigIntegerField[_ST, _GT]):
+class PositiveBigIntegerField(PositiveIntegerRelDbTypeMixin, BigIntegerField[_ST_IntegerField, _GT_IntegerField, _NT]): ...
     integer_field_class: type[BigIntegerField]
 
-class FloatField(Field[_ST, _GT]):
+_ST_FloatField = TypeVar("_ST_FloatField", bound=float | int | str | Combinable, default=float | int | str | Combinable)
+_GT_FloatField = TypeVar("_GT_FloatField", bound=float, default=float)
+
+class FloatField(Field[_ST_FloatField, _GT_FloatField, _NT]):
     _pyi_private_set_type: float | int | str | Combinable
     _pyi_private_get_type: float
     _pyi_lookup_exact_type: float
 
-class DecimalField(Field[_ST, _GT]):
+_ST_DecimalField = TypeVar("_ST_DecimalField", bound=str | float | decimal.Decimal | Combinable, default=str | float | decimal.Decimal | Combinable)
+_GT_DecimalField = TypeVar("_GT_DecimalField", bound=decimal.Decimal, default=decimal.Decimal)
+
+class DecimalField(Field[_ST_DecimalField, _GT_DecimalField, _NT]):
     _pyi_private_set_type: str | float | decimal.Decimal | Combinable
     _pyi_private_get_type: decimal.Decimal
     _pyi_lookup_exact_type: str | int | decimal.Decimal
@@ -315,10 +331,10 @@ class DecimalField(Field[_ST, _GT]):
         primary_key: bool = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _ST_DecimalField | None = ...,
         editable: bool = ...,
         auto_created: bool = ...,
         serialize: bool = ...,
@@ -333,7 +349,10 @@ class DecimalField(Field[_ST, _GT]):
     @cached_property
     def context(self) -> decimal.Context: ...
 
-class CharField(Field[_ST, _GT]):
+_ST_CharField = TypeVar("_ST_CharField", bound=str | int | Combinable, default=str | int | Combinable)
+_GT_CharField = TypeVar("_GT_CharField", bound=str, default=str)
+
+class CharField(Field[_ST_CharField, _GT_CharField, _NT]):
     _pyi_private_set_type: str | int | Combinable
     _pyi_private_get_type: str
     # objects are converted to string before comparison
@@ -346,10 +365,10 @@ class CharField(Field[_ST, _GT]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _ST_CharField | None = ...,
         editable: bool = ...,
         auto_created: bool = ...,
         serialize: bool = ...,
@@ -367,9 +386,9 @@ class CharField(Field[_ST, _GT]):
         db_collation: str | None = None,
     ) -> None: ...
 
-class CommaSeparatedIntegerField(CharField[_ST, _GT]): ...
+class CommaSeparatedIntegerField(CharField[_ST_CharField, _GT_CharField, _NT]): ...
 
-class SlugField(CharField[_ST, _GT]):
+class SlugField(CharField[_ST_CharField, _GT_CharField, _NT]):
     def __init__(
         self,
         verbose_name: _StrOrPromise | None = ...,
@@ -377,9 +396,9 @@ class SlugField(CharField[_ST, _GT]):
         primary_key: bool = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _ST_CharField | None = ...,
         editable: bool = ...,
         auto_created: bool = ...,
         serialize: bool = ...,
@@ -399,10 +418,12 @@ class SlugField(CharField[_ST, _GT]):
         allow_unicode: bool = False,
     ) -> None: ...
 
-class EmailField(CharField[_ST, _GT]):
+_ST_EmailField = TypeVar("_ST_EmailField", bound=str | Combinable, default=str | Combinable)
+
+class EmailField(CharField[_ST_EmailField, _GT_CharField, _NT]):
     _pyi_private_set_type: str | Combinable
 
-class URLField(CharField[_ST, _GT]):
+class URLField(CharField[_ST_CharField, _GT_CharField, _NT]):
     def __init__(
         self,
         verbose_name: _StrOrPromise | None = None,
@@ -412,11 +433,11 @@ class URLField(CharField[_ST, _GT]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         rel: ForeignObjectRel | None = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _ST_CharField | None = ...,
         editable: bool = ...,
         serialize: bool = ...,
         unique_for_date: str | None = ...,
@@ -432,7 +453,10 @@ class URLField(CharField[_ST, _GT]):
         error_messages: _ErrorMessagesMapping | None = ...,
     ) -> None: ...
 
-class TextField(Field[_ST, _GT]):
+_ST_TextField = TypeVar("_ST_TextField", bound=str | Combinable, default=str | Combinable)
+_GT_TextField = TypeVar("_GT_TextField", bound=str, default=str)
+
+class TextField(Field[_ST_TextField, _GT_TextField, _NT]):
     _pyi_private_set_type: str | Combinable
     _pyi_private_get_type: str
     # objects are converted to string before comparison
@@ -445,10 +469,10 @@ class TextField(Field[_ST, _GT]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _ST_TextField | None = ...,
         editable: bool = ...,
         auto_created: bool = ...,
         serialize: bool = ...,
@@ -466,21 +490,33 @@ class TextField(Field[_ST, _GT]):
         db_collation: str | None = None,
     ) -> None: ...
 
-class BooleanField(Field[_ST, _GT]):
+_ST_BooleanField = TypeVar("_ST_BooleanField", bound=bool | Combinable, default=bool | Combinable)
+_GT_BooleanField = TypeVar("_GT_BooleanField", bound=bool, default=bool)
+
+class BooleanField(Field[_ST_BooleanField, _GT_BooleanField, _NT]):
     _pyi_private_set_type: bool | Combinable
     _pyi_private_get_type: bool
     _pyi_lookup_exact_type: bool
 
-class NullBooleanField(BooleanField[_ST, _GT]):
+_ST_NullBooleanField = TypeVar("_ST_NullBooleanField", bound=bool | Combinable | None, default=bool | Combinable | None)
+_GT_NullBooleanField = TypeVar("_GT_NullBooleanField", bound=bool | None, default=bool | None)
+
+class NullBooleanField(BooleanField[_ST_NullBooleanField, _GT_NullBooleanField, _NT]):  # type: ignore[assignment]
     _pyi_private_set_type: bool | Combinable | None  # type: ignore[assignment]
     _pyi_private_get_type: bool | None  # type: ignore[assignment]
     _pyi_lookup_exact_type: bool | None  # type: ignore[assignment]
 
-class IPAddressField(Field[_ST, _GT]):
+_ST_IPAddressField = TypeVar("_ST_IPAddressField", bound=str | Combinable, default=str | Combinable)
+_GT_IPAddressField = TypeVar("_GT_IPAddressField", bound=str, default=str)
+
+class IPAddressField(Field[_ST_IPAddressField, _GT_IPAddressField, _NT]):
     _pyi_private_set_type: str | Combinable
     _pyi_private_get_type: str
 
-class GenericIPAddressField(Field[_ST, _GT]):
+_ST_GenericIPAddressField = TypeVar("_ST_GenericIPAddressField", bound=str | int | Callable[..., Any] | Combinable, default=str | int | Callable[..., Any] | Combinable)
+_GT_GenericIPAddressField = TypeVar("_GT_GenericIPAddressField", bound=str, default=str)
+
+class GenericIPAddressField(Field[_ST_GenericIPAddressField, _GT_GenericIPAddressField, _NT]):
     _pyi_private_set_type: str | int | Callable[..., Any] | Combinable
     _pyi_private_get_type: str
 
@@ -496,10 +532,10 @@ class GenericIPAddressField(Field[_ST, _GT]):
         primary_key: bool = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _ST_GenericIPAddressField | None = ...,
         editable: bool = ...,
         auto_created: bool = ...,
         serialize: bool = ...,
@@ -515,7 +551,10 @@ class GenericIPAddressField(Field[_ST, _GT]):
 class DateTimeCheckMixin:
     def check(self, **kwargs: Any) -> list[CheckMessage]: ...
 
-class DateField(DateTimeCheckMixin, Field[_ST, _GT]):
+_ST_DateField = TypeVar("_ST_DateField", bound=str | date | Combinable, default=str | date | Combinable)
+_GT_DateField = TypeVar("_GT_DateField", bound=date, default=date)
+
+class DateField(DateTimeCheckMixin, Field[_ST_DateField, _GT_DateField, _NT]):
     _pyi_private_set_type: str | date | Combinable
     _pyi_private_get_type: date
     _pyi_lookup_exact_type: str | date
@@ -532,10 +571,10 @@ class DateField(DateTimeCheckMixin, Field[_ST, _GT]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _ST_DateField | None = ...,
         editable: bool = ...,
         auto_created: bool = ...,
         serialize: bool = ...,
@@ -550,7 +589,10 @@ class DateField(DateTimeCheckMixin, Field[_ST, _GT]):
     @override
     def contribute_to_class(self, cls: type[Model], name: str, **kwargs: Any) -> None: ...  # type: ignore[override]
 
-class TimeField(DateTimeCheckMixin, Field[_ST, _GT]):
+_ST_TimeField = TypeVar("_ST_TimeField", bound=str | time | real_datetime | Combinable, default=str | time | real_datetime | Combinable)
+_GT_TimeField = TypeVar("_GT_TimeField", bound=time, default=time)
+
+class TimeField(DateTimeCheckMixin, Field[_ST_TimeField, _GT_TimeField, _NT]):
     _pyi_private_set_type: str | time | real_datetime | Combinable
     _pyi_private_get_type: time
     auto_now: bool
@@ -565,10 +607,10 @@ class TimeField(DateTimeCheckMixin, Field[_ST, _GT]):
         primary_key: bool = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _ST_TimeField | None = ...,
         editable: bool = ...,
         auto_created: bool = ...,
         serialize: bool = ...,
@@ -581,12 +623,18 @@ class TimeField(DateTimeCheckMixin, Field[_ST, _GT]):
         error_messages: _ErrorMessagesMapping | None = ...,
     ) -> None: ...
 
-class DateTimeField(DateField[_ST, _GT]):
+_ST_DateTimeField = TypeVar("_ST_DateTimeField", bound=str | real_datetime | date | Combinable, default=str | real_datetime | date | Combinable)
+_GT_DateTimeField = TypeVar("_GT_DateTimeField", bound=real_datetime, default=real_datetime)
+
+class DateTimeField(DateField[_ST_DateTimeField, _GT_DateTimeField, _NT]):
     _pyi_private_set_type: str | real_datetime | date | Combinable
     _pyi_private_get_type: real_datetime
     _pyi_lookup_exact_type: str | real_datetime
 
-class UUIDField(Field[_ST, _GT]):
+_ST_UUIDField = TypeVar("_ST_UUIDField", bound=str | uuid.UUID, default=str | uuid.UUID)
+_GT_UUIDField = TypeVar("_GT_UUIDField", bound=uuid.UUID, default=uuid.UUID)
+
+class UUIDField(Field[_ST_UUIDField, _GT_UUIDField, _NT]):
     _pyi_private_set_type: str | uuid.UUID
     _pyi_private_get_type: uuid.UUID
     _pyi_lookup_exact_type: uuid.UUID | str
@@ -599,11 +647,11 @@ class UUIDField(Field[_ST, _GT]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         rel: ForeignObjectRel | None = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _ST_UUIDField | None = ...,
         editable: bool = ...,
         serialize: bool = ...,
         unique_for_date: str | None = ...,
@@ -619,7 +667,7 @@ class UUIDField(Field[_ST, _GT]):
         error_messages: _ErrorMessagesMapping | None = ...,
     ) -> None: ...
 
-class FilePathField(Field[_ST, _GT]):
+class FilePathField(Field[_ST, _GT, _NT]):
     path: Any
     match: str | None
     recursive: bool
@@ -639,10 +687,10 @@ class FilePathField(Field[_ST, _GT]):
         max_length: int = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _ST | None = ...,
         editable: bool = ...,
         auto_created: bool = ...,
         serialize: bool = ...,
@@ -655,11 +703,15 @@ class FilePathField(Field[_ST, _GT]):
         error_messages: _ErrorMessagesMapping | None = ...,
     ) -> None: ...
 
-class BinaryField(Field[_ST, _GT]):
+_GT_BinaryField = TypeVar("_GT_BinaryField", bound=bytes | memoryview, default=bytes | memoryview)
+
+class BinaryField(Field[_ST, _GT_BinaryField, _NT]):
     _pyi_private_get_type: bytes | memoryview
     def get_placeholder(self, value: Any, compiler: SQLCompiler, connection: BaseDatabaseWrapper) -> str: ...
 
-class DurationField(Field[_ST, _GT]):
+_GT_DurationField = TypeVar("_GT_DurationField", bound=timedelta, default=timedelta)
+
+class DurationField(Field[_ST, _GT_DurationField, _NT]):
     _pyi_private_get_type: timedelta
 
 class AutoFieldMixin:
@@ -674,13 +726,16 @@ class AutoFieldMixin:
 
 class AutoFieldMeta(type): ...
 
-class AutoField(AutoFieldMixin, IntegerField[_ST, _GT], metaclass=AutoFieldMeta):  # type: ignore[misc]
-    _pyi_private_set_type: Combinable | int | str
+_ST_AutoField = TypeVar("_ST_AutoField", bound=Combinable | int | str, default=Combinable | int | str)
+_GT_AutoField = TypeVar("_GT_AutoField", bound=int, default=int)
+
+class AutoField(AutoFieldMixin, IntegerField[_ST_AutoField, _GT_AutoField, _NT], metaclass=AutoFieldMeta):
+    _pyi_private_set_type: Combinable | int | str  # type: ignore[assignment]
     _pyi_private_get_type: int
     _pyi_lookup_exact_type: str | int
 
-class BigAutoField(AutoFieldMixin, BigIntegerField[_ST, _GT]): ...  # type: ignore[misc]
-class SmallAutoField(AutoFieldMixin, SmallIntegerField[_ST, _GT]): ...  # type: ignore[misc]
+class BigAutoField(AutoFieldMixin, BigIntegerField[_ST_AutoField, _GT_AutoField, _NT]): ...
+class SmallAutoField(AutoFieldMixin, SmallIntegerField[_ST_AutoField, _GT_AutoField, _NT]): ...
 
 __all__ = [
     "BLANK_CHOICE_DASH",
