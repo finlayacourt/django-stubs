@@ -1,5 +1,5 @@
 from collections.abc import Iterable, Sequence
-from typing import Any, ClassVar, TypeVar
+from typing import Any, ClassVar, Literal, TypeVar
 
 from _typeshed import Unused
 from django.core.validators import _ValidatorCallable
@@ -12,12 +12,11 @@ from django.db.models.lookups import Transform
 from django.utils.choices import _Choices
 from django.utils.functional import _StrOrPromise
 
-# __set__ value type
-_ST = TypeVar("_ST")
-# __get__ return type
-_GT = TypeVar("_GT")
+_ST_ArrayField = TypeVar("_ST_ArrayField", bound=Sequence[Any] | Combinable, default=Sequence[Any] | Combinable)
+_GT_ArrayField = TypeVar("_GT_ArrayField", bound=list[Any], default=list[Any])
+_NT = TypeVar("_NT", Literal[True], Literal[False], default=Literal[False])
 
-class ArrayField(CheckFieldDefaultMixin, Field[_ST, _GT]):
+class ArrayField(CheckFieldDefaultMixin, Field[_ST_ArrayField, _GT_ArrayField, _NT]):
     _pyi_private_set_type: Sequence[Any] | Combinable
     _pyi_private_get_type: list[Any]
 
@@ -38,7 +37,7 @@ class ArrayField(CheckFieldDefaultMixin, Field[_ST, _GT]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
         db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
