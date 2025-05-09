@@ -32,6 +32,7 @@ _FormFieldCallback: TypeAlias = Callable[[models.Field], Field | None]
 
 _M = TypeVar("_M", bound=Model)
 _ParentM = TypeVar("_ParentM", bound=Model)
+_Cleaned = TypeVar("_Cleaned", bound=Mapping[str, Any], default=dict[str, Any])
 
 def construct_instance(
     form: BaseForm, instance: _M, fields: Container[str] | None = None, exclude: Container[str] | None = None
@@ -69,7 +70,7 @@ class ModelFormOptions(Generic[_M]):
 
 class ModelFormMetaclass(DeclarativeFieldsMetaclass): ...
 
-class BaseModelForm(BaseForm, AltersData, Generic[_M]):
+class BaseModelForm(BaseForm[_Cleaned], AltersData, Generic[_M, _Cleaned]):
     instance: _M
     _meta: ModelFormOptions[_M]
     def __init__(
@@ -91,7 +92,7 @@ class BaseModelForm(BaseForm, AltersData, Generic[_M]):
     def save(self, commit: bool = True) -> _M: ...
     def save_m2m(self) -> None: ...
 
-class ModelForm(BaseModelForm[_M], metaclass=ModelFormMetaclass):
+class ModelForm(BaseModelForm[_M, _Cleaned], metaclass=ModelFormMetaclass):
     base_fields: ClassVar[dict[str, Field]]
     declared_fields: ClassVar[dict[str, Field]]
 
@@ -107,7 +108,7 @@ def modelform_factory(
     help_texts: _HelpTexts | None = None,
     error_messages: _ErrorMessages | None = None,
     field_classes: Mapping[str, type[Field]] | None = None,
-) -> type[ModelForm[_M]]: ...
+) -> type[ModelForm[_M, _Cleaned]]: ...
 
 _ModelFormT = TypeVar("_ModelFormT", bound=ModelForm)
 

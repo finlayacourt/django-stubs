@@ -1,5 +1,5 @@
-from collections.abc import Iterable, Iterator, Mapping, MutableMapping, Sequence
-from typing import Any, ClassVar, overload
+from collections.abc import Iterable, Iterator, MutableMapping, Mapping, Sequence
+from typing import Any, ClassVar, Generic, TypeVar, overload
 
 from django.core.exceptions import ValidationError
 from django.db.models.query import _SupportsContains
@@ -11,9 +11,11 @@ from django.forms.widgets import Media, MediaDefiningClass
 from django.utils.functional import _StrOrPromise, cached_property
 from typing_extensions import override
 
+_Cleaned = TypeVar("_Cleaned", bound=Mapping[str, Any], default=dict[str, Any])
+
 class DeclarativeFieldsMetaclass(MediaDefiningClass): ...
 
-class BaseForm(_SupportsContains[str], RenderableFormMixin):
+class BaseForm(_SupportsContains[str], RenderableFormMixin, Generic[_Cleaned]):
     default_renderer: BaseRenderer | type[BaseRenderer] | None
     field_order: Iterable[str] | None
     use_required_attribute: bool
@@ -26,9 +28,9 @@ class BaseForm(_SupportsContains[str], RenderableFormMixin):
     prefix: str | None
     label_suffix: str
     empty_permitted: bool
-    fields: dict[str, Field]
+    fields: dict[str, Any]
     renderer: BaseRenderer
-    cleaned_data: dict[str, Any]
+    cleaned_data: _Cleaned
     template_name_div: str
     template_name_p: str
     template_name_table: str
@@ -75,7 +77,7 @@ class BaseForm(_SupportsContains[str], RenderableFormMixin):
     ) -> None: ...
     def has_error(self, field: str | None, code: str | None = None) -> bool: ...
     def full_clean(self) -> None: ...
-    def clean(self) -> dict[str, Any] | None: ...
+    def clean(self) -> _Cleaned | None: ...
     def has_changed(self) -> bool: ...
     @cached_property
     def changed_data(self) -> list[str]: ...
@@ -86,7 +88,7 @@ class BaseForm(_SupportsContains[str], RenderableFormMixin):
     def visible_fields(self) -> list[BoundField]: ...
     def get_initial_for_field(self, field: Field, field_name: str) -> Any: ...
 
-class Form(BaseForm, metaclass=DeclarativeFieldsMetaclass):
+class Form(BaseForm[_Cleaned], metaclass=DeclarativeFieldsMetaclass):
     base_fields: ClassVar[dict[str, Field]]
     declared_fields: ClassVar[dict[str, Field]]
 
