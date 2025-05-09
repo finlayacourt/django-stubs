@@ -3,13 +3,15 @@ from typing import Any, ClassVar, Literal, overload
 
 from django.db import models
 from django.db.models.base import Model
+from django.db.models.query import QuerySet
 from django.db.models.expressions import Combinable
 from django.db.models.fields import BooleanField
 from typing_extensions import TypeVar
 
 _T = TypeVar("_T", bound=Model)
+_QS = TypeVar("_QS", bound=QuerySet[Any])
 
-class BaseUserManager(models.Manager[_T]):
+class BaseUserManager(models.Manager[_T, _QS]):
     @classmethod
     def normalize_email(cls, email: str | None) -> str: ...
     def get_by_natural_key(self, username: str | None) -> _T: ...
