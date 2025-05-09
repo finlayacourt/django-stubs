@@ -1,11 +1,11 @@
 from typing import Any, TypeVar
 
 from django.contrib import admin
-from django.contrib.auth.models import AbstractUser, Group
+from django.contrib.auth.models import AbstractBaseUser, Group
 from django.http.request import HttpRequest
 from django.http.response import HttpResponse
 
-_AbstractUserT = TypeVar("_AbstractUserT", bound=AbstractUser)
+_AbstractUserT = TypeVar("_AbstractUserT", bound=AbstractBaseUser)
 
 class GroupAdmin(admin.ModelAdmin[Group]): ...
 
