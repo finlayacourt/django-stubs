@@ -20,9 +20,11 @@ from django.utils.choices import _Choices
 from django.utils.functional import _StrOrPromise
 
 # __set__ value type
-_ST = TypeVar("_ST")
+_ST = TypeVar("_ST", contravariant=True, default=Any)
 # __get__ return type
-_GT = TypeVar("_GT")
+_GT = TypeVar("_GT", covariant=True, default=Any)
+# null type
+_NT = TypeVar("_NT", Literal[True], Literal[False], default=Literal[False])
 
 class SRIDCacheEntry(NamedTuple):
     units: Any
@@ -32,7 +34,7 @@ class SRIDCacheEntry(NamedTuple):
 
 def get_srid_info(srid: int, connection: Any) -> SRIDCacheEntry: ...
 
-class BaseSpatialField(Field[_ST, _GT]):
+class BaseSpatialField(Field[_ST, _GT, _NT]):
     form_class: type[forms.GeometryField]
     geom_type: str
     geom_class: type[GEOSGeometry] | None
@@ -50,7 +52,7 @@ class BaseSpatialField(Field[_ST, _GT]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
         db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
@@ -79,7 +81,7 @@ class BaseSpatialField(Field[_ST, _GT]):
     def get_raster_prep_value(self, value: Any, is_candidate: Any) -> Any: ...
     def get_prep_value(self, value: Any) -> Any: ...
 
-class GeometryField(BaseSpatialField[_ST, _GT]):
+class GeometryField(BaseSpatialField[_ST, _GT, _NT]):
     dim: int
     def __init__(
         self,
@@ -96,7 +98,7 @@ class GeometryField(BaseSpatialField[_ST, _GT]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
         db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
@@ -124,7 +126,10 @@ class GeometryField(BaseSpatialField[_ST, _GT]):
     ) -> forms.GeometryField: ...
     def contribute_to_class(self, cls: type[Model], name: str, **kwargs: Any) -> None: ...  # type: ignore[override]
 
-class PointField(GeometryField[_ST, _GT]):
+_ST_PointField = TypeVar("_ST_PointField", bound=Point | Combinable, default=Point | Combinable)
+_GT_PointField = TypeVar("_GT_PointField", bound=Point, default=Point)
+
+class PointField(GeometryField[_ST_PointField, _GT_PointField, _NT]):
     _pyi_private_set_type: Point | Combinable
     _pyi_private_get_type: Point
     _pyi_lookup_exact_type: Point
@@ -132,7 +137,10 @@ class PointField(GeometryField[_ST, _GT]):
     geom_class: type[Point]
     form_class: type[forms.PointField]
 
-class LineStringField(GeometryField[_ST, _GT]):
+_ST_LineStringField = TypeVar("_ST_LineStringField", bound=LineString | Combinable, default=LineString | Combinable)
+_GT_LineStringField = TypeVar("_GT_LineStringField", bound=LineString, default=LineString)
+
+class LineStringField(GeometryField[_ST_LineStringField, _GT_LineStringField, _NT]):
     _pyi_private_set_type: LineString | Combinable
     _pyi_private_get_type: LineString
     _pyi_lookup_exact_type: LineString
@@ -140,7 +148,10 @@ class LineStringField(GeometryField[_ST, _GT]):
     geom_class: type[LineString]
     form_class: type[forms.LineStringField]
 
-class PolygonField(GeometryField[_ST, _GT]):
+_ST_PolygonField = TypeVar("_ST_PolygonField", bound=Polygon | Combinable, default=Polygon | Combinable)
+_GT_PolygonField = TypeVar("_GT_PolygonField", bound=Polygon, default=Polygon)
+
+class PolygonField(GeometryField[_ST_PolygonField, _GT_PolygonField, _NT]):
     _pyi_private_set_type: Polygon | Combinable
     _pyi_private_get_type: Polygon
     _pyi_lookup_exact_type: Polygon
@@ -148,7 +159,10 @@ class PolygonField(GeometryField[_ST, _GT]):
     geom_class: type[Polygon]
     form_class: type[forms.PolygonField]
 
-class MultiPointField(GeometryField[_ST, _GT]):
+_ST_MultiPointField = TypeVar("_ST_MultiPointField", bound=MultiPoint | Combinable, default=MultiPoint | Combinable)
+_GT_MultiPointField = TypeVar("_GT_MultiPointField", bound=MultiPoint, default=MultiPoint)
+
+class MultiPointField(GeometryField[_ST_MultiPointField, _GT_MultiPointField, _NT]):
     _pyi_private_set_type: MultiPoint | Combinable
     _pyi_private_get_type: MultiPoint
     _pyi_lookup_exact_type: MultiPoint
@@ -156,7 +170,10 @@ class MultiPointField(GeometryField[_ST, _GT]):
     geom_class: type[MultiPoint]
     form_class: type[forms.MultiPointField]
 
-class MultiLineStringField(GeometryField[_ST, _GT]):
+_ST_MultiLineStringField = TypeVar("_ST_MultiLineStringField", bound=MultiLineString | Combinable, default=MultiLineString | Combinable)
+_GT_MultiLineStringField = TypeVar("_GT_MultiLineStringField", bound=MultiLineString, default=MultiLineString)
+
+class MultiLineStringField(GeometryField[_ST_MultiLineStringField, _GT_MultiLineStringField, _NT]):
     _pyi_private_set_type: MultiLineString | Combinable
     _pyi_private_get_type: MultiLineString
     _pyi_lookup_exact_type: MultiLineString
@@ -164,7 +181,10 @@ class MultiLineStringField(GeometryField[_ST, _GT]):
     geom_class: type[MultiLineString]
     form_class: type[forms.MultiLineStringField]
 
-class MultiPolygonField(GeometryField[_ST, _GT]):
+_ST_MultiPolygonField = TypeVar("_ST_MultiPolygonField", bound=MultiPolygon | Combinable, default=MultiPolygon | Combinable)
+_GT_MultiPolygonField = TypeVar("_GT_MultiPolygonField", bound=MultiPolygon, default=MultiPolygon)
+
+class MultiPolygonField(GeometryField[_ST_MultiPolygonField, _GT_MultiPolygonField, _NT]):
     _pyi_private_set_type: MultiPolygon | Combinable
     _pyi_private_get_type: MultiPolygon
     _pyi_lookup_exact_type: MultiPolygon
@@ -172,7 +192,10 @@ class MultiPolygonField(GeometryField[_ST, _GT]):
     geom_class: type[MultiPolygon]
     form_class: type[forms.MultiPolygonField]
 
-class GeometryCollectionField(GeometryField[_ST, _GT]):
+_ST_GeometryCollectionField = TypeVar("_ST_GeometryCollectionField", bound=GeometryCollection | Combinable, default=GeometryCollection | Combinable)
+_GT_GeometryCollectionField = TypeVar("_GT_GeometryCollectionField", bound=GeometryCollection, default=GeometryCollection)
+
+class GeometryCollectionField(GeometryField[_ST_GeometryCollectionField, _GT_GeometryCollectionField, _NT]):
     _pyi_private_set_type: GeometryCollection | Combinable
     _pyi_private_get_type: GeometryCollection
     _pyi_lookup_exact_type: GeometryCollection
