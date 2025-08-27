@@ -102,3 +102,12 @@ Note the `RelatedManager` is now imported differently
 if TYPE_CHECKING:
     from django.db.models.fields.related_descriptors import RelatedManager
 ```
+
+## Authentication
+
+We add a new `HttpRequestUser` class for when we know the request is authenticated.
+
+```python
+class HttpRequestUser(HttpRequest):
+    user: _User
+```
