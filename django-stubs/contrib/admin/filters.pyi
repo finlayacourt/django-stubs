@@ -10,7 +10,7 @@ from django.db.models.fields import Field
 from django.db.models.fields.related import RelatedField
 from django.db.models.query import QuerySet
 from django.db.models.query_utils import Q
-from django.http.request import HttpRequest
+from django.http.request import HttpRequestUser
 from django.utils.datastructures import _ListOrTuple
 from django.utils.functional import _StrOrPromise
 from django.utils.safestring import SafeString
@@ -24,14 +24,14 @@ class _ListFilterChoices(TypedDict):
 class ListFilter:
     title: _StrOrPromise | None
     template: str
-    request: HttpRequest
+    request: HttpRequestUser
     used_parameters: dict[str, bool | datetime | str]
     def __init__(
-        self, request: HttpRequest, params: dict[str, str], model: type[Model], model_admin: ModelAdmin
+        self, request: HttpRequestUser, params: dict[str, str], model: type[Model], model_admin: ModelAdmin
     ) -> None: ...
     def has_output(self) -> bool: ...
     def choices(self, changelist: ChangeList) -> Iterator[_ListFilterChoices]: ...
-    def queryset(self, request: HttpRequest, queryset: QuerySet) -> QuerySet | None: ...
+    def queryset(self, request: HttpRequestUser, queryset: QuerySet) -> QuerySet | None: ...
     def expected_parameters(self) -> list[str | None]: ...
 
 class FacetsMixin:
@@ -42,7 +42,7 @@ class SimpleListFilter(FacetsMixin, ListFilter):
     parameter_name: str | None
     lookup_choices: list[tuple[str, _StrOrPromise]]
     def value(self) -> str | None: ...
-    def lookups(self, request: HttpRequest, model_admin: ModelAdmin) -> Iterable[tuple[str, _StrOrPromise]] | None: ...
+    def lookups(self, request: HttpRequestUser, model_admin: ModelAdmin) -> Iterable[tuple[str, _StrOrPromise]] | None: ...
 
 class FieldListFilter(FacetsMixin, ListFilter):
     list_separator: ClassVar[str]
@@ -52,7 +52,7 @@ class FieldListFilter(FacetsMixin, ListFilter):
     def __init__(
         self,
         field: Field,
-        request: HttpRequest,
+        request: HttpRequestUser,
         params: dict[str, str],
         model: type[Model],
         model_admin: ModelAdmin,
@@ -66,7 +66,7 @@ class FieldListFilter(FacetsMixin, ListFilter):
     def create(
         cls,
         field: Field,
-        request: HttpRequest,
+        request: HttpRequestUser,
         params: dict[str, str],
         model: type[Model],
         model_admin: ModelAdmin,
@@ -84,10 +84,10 @@ class RelatedFieldListFilter(FieldListFilter):
     @property
     def include_empty_choice(self) -> bool: ...
     def field_admin_ordering(
-        self, field: RelatedField, request: HttpRequest, model_admin: ModelAdmin
+        self, field: RelatedField, request: HttpRequestUser, model_admin: ModelAdmin
     ) -> _ListOrTuple[str]: ...
     def field_choices(
-        self, field: RelatedField, request: HttpRequest, model_admin: ModelAdmin
+        self, field: RelatedField, request: HttpRequestUser, model_admin: ModelAdmin
     ) -> list[tuple[str, _StrOrPromise]]: ...
 
 class BooleanFieldListFilter(FieldListFilter):
