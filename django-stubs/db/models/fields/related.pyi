@@ -27,11 +27,16 @@ RECURSIVE_RELATIONSHIP_CONSTANT: Literal["self"]
 def resolve_relation(scope_model: type[Model], relation: str | type[Model]) -> str | type[Model]: ...
 
 # __set__ value type
-_ST = TypeVar("_ST", contravariant=True)
+_ST = TypeVar("_ST", contravariant=True, default=Any)
 # __get__ return type
 _GT = TypeVar("_GT", covariant=True, default=_ST)
+# null type
+_NT = TypeVar("_NT", Literal[True], Literal[False], default=Literal[False])
+# related model type
+_M = TypeVar("_M", bound=Model, default=Model)
 
-class RelatedField(FieldCacheMixin, Field[_ST, _GT]):
+
+class RelatedField(FieldCacheMixin, Field[_ST, _GT, _NT]):
     one_to_many: bool
     one_to_one: bool
     many_to_many: bool
@@ -53,7 +58,7 @@ class RelatedField(FieldCacheMixin, Field[_ST, _GT]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         rel: ForeignObjectRel | None = ...,
         default: Any = ...,
@@ -86,7 +91,7 @@ class RelatedField(FieldCacheMixin, Field[_ST, _GT]):
     @property
     def target_field(self) -> Field: ...
 
-class ForeignObject(RelatedField[_ST, _GT]):
+class ForeignObject(RelatedField[_M | Combinable, _M, _NT]):
     remote_field: ForeignObjectRel
     rel_class: type[ForeignObjectRel]
     from_fields: Sequence[str]
@@ -94,7 +99,7 @@ class ForeignObject(RelatedField[_ST, _GT]):
     swappable: bool
     def __init__(
         self,
-        to: type[Model] | str,
+        to: type[_M] | str,
         on_delete: Callable[..., None],
         from_fields: Sequence[str],
         to_fields: Sequence[str],
@@ -110,10 +115,10 @@ class ForeignObject(RelatedField[_ST, _GT]):
         primary_key: bool = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _M | Combinable | None = ...,
         editable: bool = ...,
         auto_created: bool = ...,
         serialize: bool = ...,
@@ -130,7 +135,9 @@ class ForeignObject(RelatedField[_ST, _GT]):
     def __get__(self, instance: None, owner: Any) -> ForwardManyToOneDescriptor[Self]: ...
     # Model instance access
     @overload
-    def __get__(self, instance: Model, owner: Any) -> _GT: ...
+    def __get__(self: Field[Any, Any, Literal[False]], instance: Model, owner: Any) -> _M: ...
+    @overload
+    def __get__(self: Field[Any, Any, Literal[True]], instance: Any, owner: Any) -> _M | None: ...
     # non-Model instances
     @overload
     def __get__(self, instance: Any, owner: Any) -> Self: ...
@@ -146,7 +153,7 @@ class ForeignObject(RelatedField[_ST, _GT]):
     def get_joining_fields(self, reverse_join: bool = False) -> tuple[tuple[Field, Field], ...]: ...
     def get_reverse_joining_fields(self) -> tuple[tuple[Field, Field], ...]: ...
 
-class ForeignKey(ForeignObject[_ST, _GT]):
+class ForeignKey(ForeignObject[_M, _NT]):
     _pyi_private_set_type: Any | Combinable
     _pyi_private_get_type: Any
 
@@ -154,7 +161,7 @@ class ForeignKey(ForeignObject[_ST, _GT]):
     rel_class: type[ManyToOneRel]
     def __init__(
         self,
-        to: type[Model] | str,
+        to: type[_M] | str,
         on_delete: Callable[..., None],
         related_name: str | None = None,
         related_query_name: str | None = None,
@@ -169,10 +176,10 @@ class ForeignKey(ForeignObject[_ST, _GT]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _M | Combinable | None = ...,
         editable: bool = ...,
         auto_created: bool = ...,
         serialize: bool = ...,
@@ -188,7 +195,7 @@ class ForeignKey(ForeignObject[_ST, _GT]):
         db_comment: str | None = ...,
     ) -> None: ...
 
-class OneToOneField(ForeignKey[_ST, _GT]):
+class OneToOneField(ForeignKey[_M, _NT]):
     _pyi_private_set_type: Any | Combinable
     _pyi_private_get_type: Any
 
@@ -196,7 +203,7 @@ class OneToOneField(ForeignKey[_ST, _GT]):
     rel_class: type[OneToOneRel]
     def __init__(
         self,
-        to: type[Model] | str,
+        to: type[_M] | str,
         on_delete: Any,
         to_field: str | None = None,
         *,
@@ -211,10 +218,10 @@ class OneToOneField(ForeignKey[_ST, _GT]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
-        db_default: type[NOT_PROVIDED] | Expression | _ST = ...,
+        db_default: type[NOT_PROVIDED] | Expression | _M | Combinable | None = ...,
         editable: bool = ...,
         auto_created: bool = ...,
         serialize: bool = ...,
@@ -234,15 +241,17 @@ class OneToOneField(ForeignKey[_ST, _GT]):
     def __get__(self, instance: None, owner: Any) -> ForwardOneToOneDescriptor[Self]: ...
     # Model instance access
     @overload
-    def __get__(self, instance: Model, owner: Any) -> _GT: ...
+    def __get__(self: Field[Any, Any, Literal[False]], instance: Model, owner: Any) -> _M: ...
+    @overload
+    def __get__(self: Field[Any, Any, Literal[True]], instance: Any, owner: Any) -> _M | None: ...
     # non-Model instances
     @overload
     def __get__(self, instance: Any, owner: Any) -> Self: ...
 
-_Through = TypeVar("_Through", bound=Model)
-_To = TypeVar("_To", bound=Model)
+_Through = TypeVar("_Through", bound=Model, default=Model)
+_To = TypeVar("_To", bound=Model, default=Model)
 
-class ManyToManyField(RelatedField[Any, Any], Generic[_To, _Through]):
+class ManyToManyField(Generic[_To, _Through], RelatedField[Any, Any, _NT]):
     description: _StrOrPromise
     has_null_arg: bool
     swappable: bool
@@ -273,7 +282,7 @@ class ManyToManyField(RelatedField[Any, Any], Generic[_To, _Through]):
         max_length: int | None = ...,
         unique: bool = ...,
         blank: bool = ...,
-        null: bool = ...,
+        null: _NT = ...,
         db_index: bool = ...,
         default: Any = ...,
         editable: bool = ...,
