@@ -68,7 +68,7 @@ class ModelFormOptions(Generic[_M]):
 
 class ModelFormMetaclass(DeclarativeFieldsMetaclass): ...
 
-class BaseModelForm(Generic[_M], BaseForm[_Cleaned]):
+class BaseModelForm(Generic[_M, _Cleaned], BaseForm[_Cleaned]):
     instance: _M
     _meta: ModelFormOptions[_M]
     def __init__(
@@ -89,7 +89,7 @@ class BaseModelForm(Generic[_M], BaseForm[_Cleaned]):
     def save(self, commit: bool = True) -> _M: ...
     def save_m2m(self) -> None: ...
 
-class ModelForm(BaseModelForm[_M], metaclass=ModelFormMetaclass):
+class ModelForm(BaseModelForm[_M, _Cleaned], metaclass=ModelFormMetaclass):
     base_fields: ClassVar[dict[str, Field]]
     declared_fields: ClassVar[dict[str, Field]]
 
@@ -105,7 +105,7 @@ def modelform_factory(
     help_texts: _HelpTexts | None = None,
     error_messages: _ErrorMessages | None = None,
     field_classes: Mapping[str, type[Field]] | None = None,
-) -> type[ModelForm[_M]]: ...
+) -> type[ModelForm[_M, _Cleaned]]: ...
 
 _ModelFormT = TypeVar("_ModelFormT", bound=ModelForm)
 
