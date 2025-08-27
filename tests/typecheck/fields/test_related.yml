@@ -1,0 +1,1608 @@
+-   case: test_foreign_key_field_with_related_name
+    main: |
+        from myapp.models import Book, Publisher
+        book = Book()
+        reveal_type(book.publisher)  # N: Revealed type is "myapp.models.Publisher"
+        publisher = Publisher()
+        reveal_type(publisher.books)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Book]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Publisher(models.Model):
+                    pass
+                class Book(models.Model):
+                    publisher = models.ForeignKey(to=Publisher, on_delete=models.CASCADE,
+                                                  related_name='books')
+
+-   case: foreign_key_field_creates_attribute_with_underscore_id
+    main: |
+        from myapp.models import Book
+        book = Book()
+        reveal_type(book.publisher_id)  # N: Revealed type is "builtins.int"
+        reveal_type(book.owner_id)  # N: Revealed type is "builtins.int"
+    installed_apps:
+        - django.contrib.auth
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Publisher(models.Model):
+                    pass
+                class Book(models.Model):
+                    publisher = models.ForeignKey(to=Publisher, on_delete=models.CASCADE)
+                    owner = models.ForeignKey(db_column='model_id', to='auth.User', on_delete=models.CASCADE)
+
+-   case: foreign_key_field_custom_to_field
+    main: |
+        from myapp.models import Book, Publisher
+        from uuid import UUID
+        book = Book()
+        book.publisher = Publisher()
+        reveal_type(book.publisher_id)  # N: Revealed type is "uuid.UUID"
+        book.publisher_id = '821850bb-c105-426f-b340-3974419d00ca'
+        book.publisher_id = UUID('821850bb-c105-426f-b340-3974419d00ca')
+        book.publisher_id = [1]  # E: Incompatible types in assignment (expression has type "List[int]", variable has type "Union[str, UUID]")  [assignment]
+        book.publisher_id = Publisher()  # E: Incompatible types in assignment (expression has type "Publisher", variable has type "Union[str, UUID]")  [assignment]
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Publisher(models.Model):
+                    id = models.BigAutoField(primary_key=True)
+                    uuid = models.UUIDField(unique=True)
+                class Book(models.Model):
+                    publisher = models.ForeignKey(to=Publisher, to_field='uuid', on_delete=models.CASCADE)
+
+-   case: foreign_key_field_different_order_of_params
+    main: |
+        from myapp.models import Book, Publisher
+        book = Book()
+        reveal_type(book.publisher)  # N: Revealed type is "myapp.models.Publisher"
+        reveal_type(book.publisher2)  # N: Revealed type is "myapp.models.Publisher"
+
+        publisher = Publisher()
+        reveal_type(publisher.books)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Book]"
+        reveal_type(publisher.books2)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Book]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Publisher(models.Model):
+                    pass
+                class Book(models.Model):
+                    publisher = models.ForeignKey(on_delete=models.CASCADE, to=Publisher,
+                                                  related_name='books')
+                    publisher2 = models.ForeignKey(to=Publisher, related_name='books2', on_delete=models.CASCADE)
+
+-   case: foreign_key_subclass
+    main: |
+        from myapp.models import A
+        reveal_type(A.objects.get().b)  # N: Revealed type is "myapp.models.B"
+    installed_apps:
+        -   myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from typing import TypeVar
+                from django.db import models
+
+                _ST = TypeVar("_ST", contravariant=True)
+                _GT = TypeVar("_GT", covariant=True)
+
+                class MyForeignKey(models.ForeignKey[_ST, _GT]): ...
+
+                class B(models.Model): ...
+
+                class A(models.Model):
+                    b = models.ForeignKey(B, on_delete=models.CASCADE)
+
+-   case: to_parameter_as_string_with_application_name__model_imported
+    main: |
+        from myapp2.models import Book
+        book = Book()
+        reveal_type(book.publisher)  # N: Revealed type is "myapp.models.Publisher"
+    installed_apps:
+        - myapp
+        - myapp2
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Publisher(models.Model):
+                    pass
+        -   path: myapp2/__init__.py
+        -   path: myapp2/models.py
+            content: |
+                from django.db import models
+                class Book(models.Model):
+                    publisher = models.ForeignKey(to='myapp.Publisher', on_delete=models.CASCADE)
+
+-   case: one_to_one_field_no_related_name
+    main: |
+        from myapp.models import User, Profile
+        reveal_type(User().profile)  # N: Revealed type is "myapp.models.Profile"
+        reveal_type(Profile().user)  # N: Revealed type is "myapp.models.User"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class User(models.Model):
+                    pass
+                class Profile(models.Model):
+                    user = models.OneToOneField(to=User, on_delete=models.CASCADE)
+
+-   case: test_circular_dependency_in_imports_with_foreign_key
+    main: |
+        from myapp import models
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class App(models.Model):
+                    def method(self) -> None:
+                        reveal_type(self.views)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.View]"
+                        reveal_type(self.members)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Member]"
+                        reveal_type(self.sheets)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Sheet]"
+                        reveal_type(self.profile)  # N: Revealed type is "myapp.models.Profile"
+                class View(models.Model):
+                    app = models.ForeignKey(to=App, related_name='views', on_delete=models.CASCADE)
+                class Member(models.Model):
+                    app = models.ForeignKey(related_name='members', on_delete=models.CASCADE, to=App)
+                class Sheet(models.Model):
+                    app = models.ForeignKey(App, related_name='sheets', on_delete=models.CASCADE)
+                class Profile(models.Model):
+                    app = models.OneToOneField(App, related_name='profile', on_delete=models.CASCADE)
+
+-   case: test_circular_dependency_in_imports_with_string_based
+    main: |
+        from myapp.models import View
+        reveal_type(View().app.views)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.View]"
+        View().app.unknown  # E: "App" has no attribute "unknown"  [attr-defined]
+    installed_apps:
+        - myapp
+        - myapp2
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                from myapp2.models import App
+                class View(models.Model):
+                    app = models.ForeignKey(to=App, related_name='views', on_delete=models.CASCADE)
+        -   path: myapp2/__init__.py
+        -   path: myapp2/models.py
+            content: |
+                from django.db import models
+                class App(models.Model):
+                    def method(self) -> None:
+                        reveal_type(self.views)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.View]"
+
+-   case: models_related_managers_work_with_direct_model_inheritance_and_with_inheritance_from_other_model
+    main: |
+        from myapp.models import App
+        reveal_type(App().views)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.View]"
+        reveal_type(App().views2)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.View2]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class App(models.Model):
+                    pass
+                class View(models.Model):
+                    app = models.ForeignKey(to=App, on_delete=models.CASCADE, related_name='views')
+                class View2(View):
+                    app2 = models.ForeignKey(to=App, on_delete=models.CASCADE, related_name='views2')
+
+-   case: models_imported_inside_init_file_foreign_key
+    main: |
+        from myapp2.models import View
+        reveal_type(View().app.views)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp2.models.View]"
+    installed_apps:
+        - myapp
+        - myapp2
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from .app import App as App
+        -   path: myapp/models/app.py
+            content: |
+                from django.db import models
+                class App(models.Model):
+                    pass
+        -   path: myapp2/__init__.py
+        -   path: myapp2/models.py
+            content: |
+                from django.db import models
+                from myapp.models import App
+                class View(models.Model):
+                    app = models.ForeignKey(to='myapp.App', related_name='views', on_delete=models.CASCADE)
+
+-   case: models_imported_inside_init_file_one_to_one_field
+    main: |
+        from myapp2.models import Profile
+        reveal_type(Profile().user)  # N: Revealed type is "myapp.models.user.User"
+        reveal_type(Profile().user.profile)  # N: Revealed type is "myapp2.models.Profile"
+        reveal_type(Profile.user.field)  # N: Revealed type is "django.db.models.fields.related.OneToOneField[Union[myapp.models.user.User, django.db.models.expressions.Combinable], myapp.models.user.User]"
+    installed_apps:
+        - myapp
+        - myapp2
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from .user import User as User
+        -   path: myapp/models/user.py
+            content: |
+                from django.db import models
+                class User(models.Model):
+                    pass
+        -   path: myapp2/__init__.py
+        -   path: myapp2/models.py
+            content: |
+                from django.db import models
+                from myapp.models import User
+                class Profile(models.Model):
+                    user = models.OneToOneField(to='myapp.User', related_name='profile', on_delete=models.CASCADE)
+
+-   case: models_triple_circular_reference
+    main: |
+        from myapp.models import App
+        reveal_type(App().owner)  # N: Revealed type is "myapp.models.user.User"
+        reveal_type(App().owner.profile)  # N: Revealed type is "myapp.models.profile.Profile"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from .user import User as User
+                from .profile import Profile as Profile
+                from .app import App as App
+        -   path: myapp/models/user.py
+            content: |
+                from django.db import models
+                class User(models.Model):
+                    pass
+        -   path: myapp/models/profile.py
+            content: |
+                from django.db import models
+                class Profile(models.Model):
+                    user = models.OneToOneField(to='myapp.User', related_name='profile', on_delete=models.CASCADE)
+        -   path: myapp/models/app.py
+            content: |
+                from django.db import models
+                class App(models.Model):
+                    owner = models.ForeignKey(to='myapp.User', on_delete=models.CASCADE, related_name='apps')
+
+-   case: many_to_many_field_converts_to_queryset_of_model_type
+    main: |
+        from myapp.models import App, Member
+        reveal_type(Member().apps)  # N: Revealed type is "myapp.models.App_ManyRelatedManager[myapp.models.Member_apps]"
+        reveal_type(Member().apps.get())  # N: Revealed type is "myapp.models.App"
+        reveal_type(Member().apps.app_method())  # N: Revealed type is "builtins.str"
+        Member().apps.add(App())
+        reveal_type(App().members)  # N: Revealed type is "myapp.models.Member_ManyRelatedManager[myapp.models.Member_apps]"
+        reveal_type(App().members.get())  # N: Revealed type is "myapp.models.Member"
+        reveal_type(App().members.member_method())  # N: Revealed type is "builtins.int"
+        App().members.add(Member())
+        reveal_type(Member.apps.field)  # N: Revealed type is "django.db.models.fields.related.ManyToManyField[myapp.models.App, myapp.models.Member_apps]"
+        reveal_type(App.members)  # N: Revealed type is "django.db.models.fields.related_descriptors.ManyToManyDescriptor[myapp.models.Member, myapp.models.Member_apps]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class AppQuerySet(models.QuerySet["App"]):
+                    def app_method(self) -> str:
+                        return "abc"
+                class App(models.Model):
+                    objects = AppQuerySet.as_manager()
+
+                class MemberQuerySet(models.QuerySet["Member"]):
+                    def member_method(self) -> int:
+                        return 1
+                class Member(models.Model):
+                    apps = models.ManyToManyField(to=App, related_name='members')
+                    objects = MemberQuerySet.as_manager()
+
+-   case: many_to_many_works_with_string_if_imported
+    main: |
+        from myapp.models import Member
+        reveal_type(Member().apps)  # N: Revealed type is "myapp2.models.App_ManyRelatedManager[myapp.models.Member_apps]"
+    installed_apps:
+        - myapp
+        - myapp2
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Member(models.Model):
+                    apps = models.ManyToManyField(to='myapp2.App', related_name='members')
+        -   path: myapp2/__init__.py
+        -   path: myapp2/models.py
+            content: |
+                from django.db import models
+                class App(models.Model):
+                    pass
+
+-   case: foreign_key_with_self
+    main: |
+        from myapp.models import User
+        reveal_type(User().parent)  # N: Revealed type is "myapp.models.User"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class User(models.Model):
+                    parent = models.ForeignKey('self', on_delete=models.CASCADE)
+
+-   case: many_to_many_with_self
+    main: |
+        from myapp.models import User
+        reveal_type(User().friends)  # N: Revealed type is "myapp.models.User_ManyRelatedManager[myapp.models.User_friends]"
+        reveal_type(User().friends.get())  # N: Revealed type is "myapp.models.User"
+        reveal_type(User.friends.through.objects.get())  # N: Revealed type is "myapp.models.User_friends"
+        reveal_type(User.friends.through._default_manager)  # N: Revealed type is "django.db.models.manager.Manager[myapp.models.User_friends]"
+        reveal_type(User.friends.through().from_user)  # N: Revealed type is "myapp.models.User"
+        reveal_type(User.friends.through().from_user_id)  # N: Revealed type is "builtins.int"
+        reveal_type(User.friends.through().to_user)  # N: Revealed type is "myapp.models.User"
+        reveal_type(User.friends.through().to_user_id)  # N: Revealed type is "builtins.int"
+        reveal_type(User.friends.through)  # N: Revealed type is "Type[myapp.models.User_friends]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class User(models.Model):
+                    friends = models.ManyToManyField('self')
+
+-   case: recursively_checking_for_base_model_in_to_parameter
+    main: |
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+
+                class BaseModel(models.Model):
+                    pass
+                class ParkingSpot(BaseModel):
+                    pass
+                class Booking(BaseModel):
+                    parking_spot = models.ForeignKey(to=ParkingSpot, null=True, on_delete=models.SET_NULL)
+
+-   case: if_no_related_name_is_passed_create_default_related_managers
+    main: |
+        from myapp.models import Publisher
+        reveal_type(Publisher().book_set)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Book]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Publisher(models.Model):
+                    pass
+                class Book(models.Model):
+                    publisher = models.ForeignKey(to=Publisher, on_delete=models.CASCADE)
+
+-   case: underscore_id_attribute_has_set_type_of_primary_key_if_explicit
+    main: |
+        import datetime
+        from myapp.models import Book, Book2
+
+        reveal_type(Book().publisher_id)  # N: Revealed type is "builtins.str"
+        Book(publisher_id=1)
+        Book(publisher_id='hello')
+        Book(publisher_id=datetime.datetime.now())  # E: Incompatible type for "publisher_id" of "Book" (got "datetime", expected "Union[str, int, Combinable]")  [misc]
+        Book.objects.create(publisher_id=1)
+        Book.objects.create(publisher_id='hello')
+
+        reveal_type(Book2().publisher_id)  # N: Revealed type is "builtins.int"
+        Book2(publisher_id=1)
+        Book2(publisher_id=[])  # E: Incompatible type for "publisher_id" of "Book2" (got "List[Any]", expected "Union[float, int, str, Combinable]")  [misc]
+        Book2.objects.create(publisher_id=1)
+        Book2.objects.create(publisher_id=[])  # E: Incompatible type for "publisher_id" of "Book2" (got "List[Any]", expected "Union[float, int, str, Combinable]")  [misc]
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                import datetime
+                class Publisher(models.Model):
+                    mypk = models.CharField(max_length=100, primary_key=True)
+                class Book(models.Model):
+                    publisher = models.ForeignKey(to=Publisher, on_delete=models.CASCADE)
+
+                class Publisher2(models.Model):
+                    mypk = models.IntegerField(primary_key=True)
+                class Book2(models.Model):
+                    publisher = models.ForeignKey(to=Publisher2, on_delete=models.CASCADE)
+
+-   case: if_model_is_defined_as_name_of_the_class_look_for_it_in_the_same_app
+    main: |
+        from myapp.models import Book
+        reveal_type(Book().publisher)  # N: Revealed type is "myapp.models.publisher.Publisher"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from .publisher import Publisher as Publisher
+                from .book import Book as Book
+        -   path: myapp/models/publisher.py
+            content: |
+                from django.db import models
+                class Publisher(models.Model):
+                    pass
+        -   path: myapp/models/book.py
+            content: |
+                from django.db import models
+                class Book(models.Model):
+                    publisher = models.ForeignKey(to='Publisher', on_delete=models.CASCADE)
+
+
+-   case: fail_if_no_model_in_the_same_app_models_init_py
+    main: |
+        from myapp.models import Book
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from .book import Book as Book
+        -   path: myapp/models/publisher.py
+            content: |
+                from django.db import models
+                class Publisher(models.Model):
+                    pass
+        -   path: myapp/models/book.py
+            content: |
+                from django.db import models
+                class Book(models.Model):
+                    publisher = models.ForeignKey(to='Publisher', on_delete=models.CASCADE)  # E: Cannot find model 'Publisher' referenced in field 'publisher'  [misc]
+
+
+-   case: test_foreign_key_field_without_backwards_relation
+    main: |
+        from myapp.models import Book, Publisher
+        book = Book()
+        reveal_type(book.publisher)  # N: Revealed type is "myapp.models.Publisher"
+
+        publisher = Publisher()
+        reveal_type(publisher.books)
+        reveal_type(publisher.books2)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Book]"
+    out: |
+        main:6: error: "Publisher" has no attribute "books"; maybe "books2"?  [attr-defined]
+        main:6: note: Revealed type is "Any"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Publisher(models.Model):
+                    pass
+                class Book(models.Model):
+                    publisher = models.ForeignKey(to=Publisher, on_delete=models.CASCADE,
+                                                  related_name='+')
+                    publisher2 = models.ForeignKey(to=Publisher, on_delete=models.CASCADE,
+                                                   related_name='books2')
+
+-   case: to_parameter_could_be_resolved_if_passed_from_settings
+    main: |
+        from myapp.models import Book
+        book = Book()
+        reveal_type(book.publisher)  # N: Revealed type is "myapp.models.Publisher"
+    custom_settings: |
+        INSTALLED_APPS = ('django.contrib.contenttypes', 'myapp')
+        BOOK_RELATED_MODEL = 'myapp.Publisher'
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.conf import settings
+                from django.db import models
+
+                class Publisher(models.Model):
+                    pass
+                class Book(models.Model):
+                    publisher = models.ForeignKey(to=settings.BOOK_RELATED_MODEL, on_delete=models.CASCADE,
+                                                  related_name='books')
+
+-   case: foreign_key_with_custom_app_name
+    main: |
+        from myapp.models import MyMain
+        reveal_type(MyMain().user)  # N: Revealed type is "myapp2.models.MyUser"
+    installed_apps:
+        - myapp
+        - myapp2.apps.MyApp2Config
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class MyMain(models.Model):
+                    user = models.ForeignKey('myapp2__user.MyUser', on_delete=models.CASCADE)
+        -   path: myapp2/__init__.py
+        -   path: myapp2/models.py
+            content: |
+                from django.db import models
+                class MyUser(models.Model):
+                    pass
+        -   path: myapp2/apps.py
+            content: |
+                from django.apps.config import AppConfig
+                class MyApp2Config(AppConfig):
+                    name = 'myapp2'
+                    label = 'myapp2__user'
+
+
+-   case: related_field_to_extracted_from_function
+    main: |
+        from myapp.models import Profile
+        reveal_type(Profile().user)  # N: Revealed type is "myapp.models.User"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class User(models.Model):
+                    pass
+                def get_user_model_name() -> str:
+                    return 'myapp.User'
+                class Profile(models.Model):
+                    user = models.ForeignKey(to=get_user_model_name(), on_delete=models.CASCADE)
+
+
+-   case: related_manager_name_defined_by_pattern
+    main: |
+        from myapp.models import Publisher
+        reveal_type(Publisher().books)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Book]"
+        reveal_type(Publisher().articles)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Article]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Publisher(models.Model):
+                    pass
+                class Entry(models.Model):
+                    class Meta:
+                        abstract = True
+                    publisher = models.ForeignKey(to=Publisher, related_name='%(class)ss', on_delete=models.CASCADE)
+                class Book(Entry):
+                    pass
+                class Article(Entry):
+                    pass
+
+
+-   case: test_related_fields_returned_as_descriptors_from_model_class
+    main: |
+        from myapp.models import Author, Blog, Publisher, Profile
+        reveal_type(Author.blogs)  # N: Revealed type is "django.db.models.fields.related_descriptors.ManyToManyDescriptor[myapp.models.Blog, myapp.models.Author_blogs]"
+        reveal_type(Author.blogs.through)  # N: Revealed type is "Type[myapp.models.Author_blogs]"
+        reveal_type(Author().blogs)  # N: Revealed type is "myapp.models.Blog_ManyRelatedManager[myapp.models.Author_blogs]"
+        reveal_type(Blog.publisher)  # N: Revealed type is "django.db.models.fields.related_descriptors.ForwardManyToOneDescriptor[django.db.models.fields.related.ForeignKey[Union[myapp.models.Publisher, django.db.models.expressions.Combinable], myapp.models.Publisher]]"
+        reveal_type(Publisher.profile)  # N: Revealed type is "django.db.models.fields.related_descriptors.ForwardOneToOneDescriptor[django.db.models.fields.related.OneToOneField[Union[myapp.models.Profile, django.db.models.expressions.Combinable], myapp.models.Profile]]"
+        reveal_type(Author.file)  # N: Revealed type is "django.db.models.fields.files.FileDescriptor"
+
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Profile(models.Model):
+                    pass
+                class Publisher(models.Model):
+                    profile = models.OneToOneField(Profile, on_delete=models.CASCADE)
+                class Blog(models.Model):
+                    publisher = models.ForeignKey(Publisher, on_delete=models.CASCADE)
+                class Author(models.Model):
+                    blogs = models.ManyToManyField(Blog)
+                    file = models.FileField()
+
+
+-   case: test_foreign_key_from_superclass_inherits_correctly
+    main: |
+        from myapp.models import MyUser, Book, Article, LibraryEntity
+        reveal_type(Book().registered_by_user)  # N: Revealed type is "myapp.models.MyUser"
+        reveal_type(Article().registered_by_user)  # N: Revealed type is "myapp.models.MyUser"
+
+        user = MyUser()
+        reveal_type(user.book_set) # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Book]"
+        reveal_type(user.article_set) # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Article]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class MyUser(models.Model):
+                    pass
+                class LibraryEntity(models.Model):
+                    class Meta:
+                        abstract = True
+                    registered_by_user = models.ForeignKey(MyUser, on_delete=models.CASCADE)
+                class Book(LibraryEntity):
+                    pass
+                class Article(LibraryEntity):
+                    pass
+
+
+-   case: test_foreign_key_from_superclass_inherits_correctly_when_also_inheriting_manager
+    main: |
+        from myapp.models import MyUser, Book, Article, LibraryEntity
+        reveal_type(Book().registered_by_user)  # N: Revealed type is "myapp.models.MyUser"
+        reveal_type(Article().registered_by_user)  # N: Revealed type is "myapp.models.MyUser"
+
+        user = MyUser()
+        reveal_type(user.book_set) # N: Revealed type is "myapp.models.Book_RelatedManager"
+        reveal_type(user.article_set) # N: Revealed type is "myapp.models.Article_RelatedManager"
+        reveal_type(user.book_set.add)  # N: Revealed type is "def (*objs: Union[myapp.models.Book, builtins.int], bulk: builtins.bool =)"
+        reveal_type(user.article_set.add)  # N: Revealed type is "def (*objs: Union[myapp.models.Article, builtins.int], bulk: builtins.bool =)"
+        reveal_type(user.book_set.filter)  # N: Revealed type is "def (*args: Any, **kwargs: Any) -> myapp.models.LibraryEntityQuerySet"
+        reveal_type(user.book_set.get())  # N: Revealed type is "myapp.models.Book"
+        reveal_type(user.article_set.filter)  # N: Revealed type is "def (*args: Any, **kwargs: Any) -> myapp.models.LibraryEntityQuerySet"
+        reveal_type(user.article_set.get())  # N: Revealed type is "myapp.models.Article"
+        reveal_type(user.book_set.queryset_method())  # N: Revealed type is "builtins.int"
+        reveal_type(user.article_set.queryset_method())  # N: Revealed type is "builtins.int"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+              from django.db import models
+              class MyUser(models.Model):
+                  pass
+              class LibraryEntityQuerySet(models.QuerySet):
+                  def queryset_method(self) -> int:
+                      return 1
+              LibraryEntityManager = models.Manager.from_queryset(LibraryEntityQuerySet)
+              class LibraryEntity(models.Model):
+                  class Meta:
+                      abstract = True
+                  objects = LibraryEntityManager()
+                  registered_by_user = models.ForeignKey(MyUser, on_delete=models.CASCADE)
+              class Book(LibraryEntity):
+                  pass
+              class Article(LibraryEntity):
+                  pass
+
+-   case: foreign_key_relationship_for_models_with_custom_manager
+    main: |
+        from myapp.models import Transaction
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                from django.db.models.manager import Manager
+                class TransactionQuerySet(models.QuerySet):
+                    pass
+                TransactionManager = Manager.from_queryset(TransactionQuerySet)
+                class Transaction(models.Model):
+                    pk = 0
+                    objects = TransactionManager()
+                    def test(self) -> None:
+                        self.transactionlog_set
+                class TransactionLog(models.Model):
+                    transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE)
+
+                Transaction().test()
+
+
+-   case: foreign_key_relationship_for_models_with_custom_manager_unsolvable
+    main: |
+        from myapp.models import Transaction
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                from django.db.models.manager import Manager
+                class TransactionQuerySet(models.QuerySet):
+                    def custom(self) -> None:
+                        pass
+
+                def TransactionManager() -> Manager:
+                    return Manager.from_queryset(TransactionQuerySet)()
+
+                class Transaction(models.Model):
+                    objects = TransactionManager()
+                    def test(self) -> None:
+                        reveal_type(self.transactionlog_set)
+                        # We use a fallback Any type:
+                        reveal_type(Transaction.objects)
+                        reveal_type(Transaction.objects.custom())
+
+                class TransactionLog(models.Model):
+                    transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE)
+    out: |
+        myapp/models:13: note: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.TransactionLog]"
+        myapp/models:15: note: Revealed type is "myapp.models.ManagerFromTransactionQuerySet[myapp.models.Transaction]"
+        myapp/models:16: note: Revealed type is "None"
+
+
+-   case: resolve_primary_keys_for_foreign_keys_with_abstract_self_model
+    main: |
+        from myapp.models import User
+        reveal_type(User().parent)  # N: Revealed type is "myapp.models.User"
+        reveal_type(User().parent_id)  # N: Revealed type is "builtins.int"
+
+        reveal_type(User().parent2)  # N: Revealed type is "Union[myapp.models.User, None]"
+        reveal_type(User().parent2_id)  # N: Revealed type is "Union[builtins.int, None]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class AbstractUser(models.Model):
+                    parent = models.ForeignKey('self', on_delete=models.CASCADE)
+                    parent2 = models.ForeignKey('self', null=True, on_delete=models.CASCADE)
+                    class Meta:
+                        abstract = True
+                class User(AbstractUser):
+                    pass
+
+-   case: nullable_foreign_key_with_init_overridden
+    main: |
+        from myapp.models import A
+        reveal_type(A.objects.get().b)  # N: Revealed type is "Union[myapp.models.B, None]"
+    installed_apps:
+        -   myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from typing import Any, TypeVar
+                from django.db import models
+
+                _ST = TypeVar("_ST", contravariant=True)
+                _GT = TypeVar("_GT", covariant=True)
+
+                class FK(models.ForeignKey[_ST, _GT]):
+                    def __init__(self, *args: Any, **kwargs: Any) -> None:
+                        kwargs.setdefault('on_delete', models.CASCADE)
+                        super().__init__(*args, **kwargs)
+
+                class B(models.Model): ...
+
+                class A(models.Model):
+                    b = FK(B, null=True, on_delete=models.CASCADE)
+
+-   case: related_manager_is_a_subclass_of_default_manager
+    main: |
+        from myapp.models import User, Order, Product
+        reveal_type(User().orders)  # N: Revealed type is "myapp.models.Order_RelatedManager"
+        reveal_type(User().orders.get())  # N: Revealed type is "myapp.models.Order"
+        reveal_type(User().orders.manager_method())  # N: Revealed type is "builtins.int"
+        reveal_type(Product.objects.queryset_method())  # N: Revealed type is "builtins.int"
+        reveal_type(Order().products)  # N: Revealed type is "myapp.models.Product_RelatedManager"
+        reveal_type(Order().products.get())  # N: Revealed type is "myapp.models.Product"
+        reveal_type(Order().products.queryset_method())  # N: Revealed type is "builtins.int"
+        cond: bool
+        if cond:
+            manager = User().products
+        else:
+            manager = Order().products
+        reveal_type(manager)  # N: Revealed type is "myapp.models.Product_RelatedManager"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class User(models.Model):
+                    pass
+                class OrderManager(models.Manager):
+                    def manager_method(self) -> int:
+                        pass
+                class Order(models.Model):
+                    objects = OrderManager()
+                    user = models.ForeignKey(to=User, on_delete=models.CASCADE, related_name='orders')
+                class ProductQueryset(models.QuerySet):
+                    def queryset_method(self) -> int:
+                        pass
+                ProductManager = models.Manager.from_queryset(ProductQueryset)
+                class Product(models.Model):
+                    objects = ProductManager()
+                    order = models.ForeignKey(to=Order, on_delete=models.CASCADE, related_name='products')
+                    user = models.ForeignKey(to=User, on_delete=models.CASCADE, related_name='products')
+
+-   case: related_manager_shared_between_multiple_relations
+    main: |
+        from myapp.models.store import Store
+        from myapp.models.user import User
+        reveal_type(Store().purchases)  # N: Revealed type is "myapp.models.purchase.Purchase_RelatedManager"
+        reveal_type(Store().purchases.queryset_method())  # N: Revealed type is "myapp.models.querysets.PurchaseQuerySet"
+        reveal_type(Store().purchases.filter())  # N: Revealed type is "myapp.models.querysets.PurchaseQuerySet"
+        reveal_type(Store().purchases.get())  # N: Revealed type is "myapp.models.purchase.Purchase"
+        reveal_type(Store().purchases.filter().queryset_method())  # N: Revealed type is "myapp.models.querysets.PurchaseQuerySet"
+        reveal_type(User().purchases)  # N: Revealed type is "myapp.models.purchase.Purchase_RelatedManager"
+        reveal_type(User().purchases.queryset_method())  # N: Revealed type is "myapp.models.querysets.PurchaseQuerySet"
+        reveal_type(User().purchases.filter())  # N: Revealed type is "myapp.models.querysets.PurchaseQuerySet"
+        reveal_type(User().purchases.get())  # N: Revealed type is "myapp.models.purchase.Purchase"
+        reveal_type(User().purchases.filter().queryset_method())  # N: Revealed type is "myapp.models.querysets.PurchaseQuerySet"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from .purchase import Purchase
+                from .store import Store
+                from .user import User
+        -   path: myapp/models/store.py
+            content: |
+                from django.db import models
+
+                class Store(models.Model):
+                    ...
+        -   path: myapp/models/user.py
+            content: |
+                from django.db import models
+
+                class User(models.Model):
+                    ...
+        -   path: myapp/models/querysets.py
+            content: |
+                from django.db.models import QuerySet
+                from typing import TYPE_CHECKING
+                if TYPE_CHECKING:
+                    from .purchase import Purchase
+
+                class PurchaseQuerySet(QuerySet['Purchase']):
+                    def queryset_method(self) -> "PurchaseQuerySet":
+                        return self.all()
+        -   path: myapp/models/purchase.py
+            content: |
+                from django.db import models
+                from django.db.models.manager import Manager
+                from .querysets import PurchaseQuerySet
+                from .store import Store
+                from .user import User
+
+                PurchaseManager = Manager.from_queryset(PurchaseQuerySet)
+                class Purchase(models.Model):
+                    objects = PurchaseManager()
+                    store = models.ForeignKey(to=Store, on_delete=models.CASCADE, related_name='purchases')
+                    user = models.ForeignKey(to=User, on_delete=models.CASCADE, related_name='purchases')
+
+-   case: explicitly_declared_related_manager_is_not_overridden
+    main: |
+        from myapp.models import User
+        reveal_type(User().purchases)  # N: Revealed type is "builtins.int"
+        User().purchases.filter()  # E: "int" has no attribute "filter"  [attr-defined]
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                from django.db.models.manager import Manager
+
+                class User(models.Model):
+                    purchases: int
+
+                class PurchaseQuerySet(models.QuerySet['Purchase']):
+                    def queryset_method(self) -> "PurchaseQuerySet":
+                        return self.all()
+
+                PurchaseManager = Manager.from_queryset(PurchaseQuerySet)
+                class Purchase(models.Model):
+                    objects = PurchaseManager()
+                    user = models.ForeignKey(to=User, on_delete=models.CASCADE, related_name='purchases')
+
+
+-   case: related_manager_no_conflict_from_star_import
+    main: |
+        import myapp.models
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from myapp.models.a import *
+                # make sure generated related manager from address to user doesn't have
+                # the same name with related manager from profile to user
+                from myapp.models.b import *
+        -   path: myapp/models/a.py
+            content: |
+                from django.db import models
+                class Address(models.Model):
+                    pass
+        -   path: myapp/models/b.py
+            content: |
+                from django.db import models
+                from .a import Address
+                class Profile(models.Model):
+                    pass
+                class UserQuerySet(models.QuerySet):
+                    pass
+                UserManager = models.Manager.from_queryset(UserQuerySet)
+                class User(models.Model):
+                    address = models.ForeignKey(Address, on_delete=models.CASCADE)
+                    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
+                    objects = UserManager()
+
+-   case: many_to_many_field_can_be_used_in_alias
+    main: |
+        from typing import TypeVar, Sequence, Union
+        from django.db import models
+        T = TypeVar("T", bound=models.Model)
+        ManyToManyFieldAlias = Union["models.ManyToManyField[T, T]"]
+
+-   case: callable_reverse_manager
+    main: |
+        from myapp.models import SalesMan
+        sales_man = SalesMan()
+        reveal_type(sales_man.client) # N: Revealed type is "myapp.models.CustomUser_ManyRelatedManager[myapp.models.SalesMan_client]"
+        reveal_type(sales_man.client(manager="staffs")) # N: Revealed type is "django.db.models.fields.related_descriptors.ManyRelatedManager[myapp.models.CustomUser, myapp.models.SalesMan_client]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+
+                class CustomUser(models.Model):
+                    staffs = models.Manager()
+
+                class SalesMan(models.Model):
+                    client = models.ManyToManyField(CustomUser)
+
+-   case: test_fails_if_app_label_is_unknown_in_relation_field
+    main: |
+        from installed.models import InstalledModel
+        InstalledModel.objects.filter(non_installed__isnull=True)
+    installed_apps:
+      - installed
+    files:
+        -   path: installed/__init__.py
+        -   path: installed/models.py
+            content: |
+                from django.db import models
+                class InstalledModel(models.Model):
+                    non_installed = models.ForeignKey(  # E: Cannot find model 'not_installed.NonInstalledModel' referenced in field 'non_installed'  [misc]
+                        "not_installed.NonInstalledModel", on_delete=models.CASCADE
+                    )
+-   case: test_foreign_key_to_as_string
+    main: |
+        from myapp.models import Book, Publisher
+        publisher = Publisher.objects.create(name="Example Publisher")
+        book = Book.objects.create(name="Book", publisher=publisher)
+        Book.objects.filter(publisher=publisher)
+    installed_apps:
+        -   myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from django.db import models
+                from django.db.models.query import QuerySet
+
+                class Publisher(models.Model):
+                    name = models.CharField()
+
+                class PrintedGood(models.Model):
+                    publisher = models.ForeignKey(to="myapp.Publisher", on_delete=models.CASCADE)
+
+                    class Meta:
+                        abstract = True
+
+                class Book(PrintedGood):
+                    name = models.CharField()
+-   case: test_foreign_key_to_as_string_filter_on_abstract
+    main: |
+        from myapp.models import Book, Publisher
+
+    installed_apps:
+        -   myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from django.db import models
+                from django.db.models.query import QuerySet
+
+                class Publisher(models.Model):
+                    name = models.CharField()
+
+                class MyModel(models.Model):
+                    pass
+
+                class PrintedGood(MyModel):
+                    publisher = models.ForeignKey(to="myapp.Publisher", on_delete=models.CASCADE)
+
+                    @property
+                    def siblings(self) -> QuerySet['PrintedGood']:
+                        return self.__class__.objects.filter(publisher=self.publisher)
+
+                    class Meta:
+                        abstract = True
+
+                class Book(PrintedGood):
+                    name = models.CharField()
+
+-   case: test_explicit_reverse_many_to_one_descriptor
+    main: |
+        from myapp.models import Other
+        reveal_type(Other.explicit_descriptor)  # N: Revealed type is "django.db.models.fields.related_descriptors.ReverseManyToOneDescriptor[myapp.models.MyModel]"
+        reveal_type(Other().explicit_descriptor)  # N: Revealed type is "myapp.models.MyModel_RelatedManager"
+        reveal_type(Other().explicit_descriptor.custom_method())  # N: Revealed type is "builtins.int"
+    installed_apps:
+        -   myapp
+    monkeypatch: true
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from typing import ClassVar
+                from django.db import models
+                from django.db.models.fields.related_descriptors import ReverseManyToOneDescriptor
+
+                class Other(models.Model):
+                    explicit_descriptor: ClassVar[ReverseManyToOneDescriptor["MyModel"]]
+
+                class CustomManager(models.Manager["MyModel"]):
+                    def custom_method(self) -> int: ...
+
+                class MyModel(models.Model):
+                    rel = models.ForeignKey(
+                        Other, on_delete=models.CASCADE, related_name="explicit_descriptor"
+                    )
+
+                    objects = CustomManager()
+
+-   case: test_reverse_one_to_one_descriptor
+    main: |
+        from myapp.models import MyModel, Other
+        reveal_type(MyModel.first.RelatedObjectDoesNotExist)
+        reveal_type(Other.mymodel)
+        reveal_type(Other.mymodel.get_queryset())
+        reveal_type(Other.mymodel.RelatedObjectDoesNotExist)
+        reveal_type(Other.has_explicit_name.RelatedObjectDoesNotExist)
+        try:
+            other = Other.objects.get()
+            reveal_type(other.mymodel)
+        except Other.mymodel.RelatedObjectDoesNotExist:
+            ...
+        else:
+            other.mymodel = MyModel()
+            other.mymodel = Other()
+            other.mymodel = None
+            other.has_explicit_name = MyModel()
+            other.has_explicit_name = Other()
+            other.has_explicit_name = None
+    out: |
+        main:2: note: Revealed type is "Type[django.core.exceptions.ObjectDoesNotExist]"
+        main:3: note: Revealed type is "django.db.models.fields.related_descriptors.ReverseOneToOneDescriptor[myapp.models.Other, myapp.models.MyModel]"
+        main:4: note: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel, myapp.models.MyModel]"
+        main:5: note: Revealed type is "Type[django.core.exceptions.ObjectDoesNotExist]"
+        main:6: note: Revealed type is "Type[django.core.exceptions.ObjectDoesNotExist]"
+        main:9: note: Revealed type is "myapp.models.MyModel"
+        main:14: error: Incompatible types in assignment (expression has type "Other", variable has type "Optional[MyModel]")  [assignment]
+        main:17: error: Incompatible types in assignment (expression has type "Other", variable has type "Optional[MyModel]")  [assignment]
+    installed_apps:
+        -   myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from django.db import models
+
+                class Other(models.Model):
+                    ...
+                class MyModel(models.Model):
+                    first = models.OneToOneField(Other, on_delete=models.CASCADE)
+                    second = models.OneToOneField(
+                        Other, on_delete=models.CASCADE, related_name="has_explicit_name"
+                    )
+
+-   case: test_many_to_many
+    main: |
+        from myapp.models import MyModel, Other
+        reveal_type(MyModel.auto_through.through.objects.get())
+        reveal_type(MyModel().auto_through.get())
+        reveal_type(Other().autos.get())
+
+        reveal_type(MyModel.custom_through.through.objects.get())
+        reveal_type(MyModel().custom_through.get())
+        reveal_type(MyModel.custom_through.through.objects.custom_qs_method())
+        reveal_type(Other().customs.get())
+
+        auto_through = MyModel.auto_through.through.objects.get()
+        reveal_type(auto_through.id)
+        reveal_type(auto_through.pk)
+        reveal_type(auto_through.mymodel)
+        reveal_type(auto_through.mymodel_id)
+        reveal_type(auto_through.other)
+        reveal_type(auto_through.other_id)
+
+        reveal_type(MyModel.auto_through.through)
+        reveal_type(MyModel.auto_through.through.mymodel)
+        reveal_type(MyModel.auto_through.through._default_manager)
+
+        reveal_type(MyModel.other_again.through)
+        reveal_type(Other.autos)
+        reveal_type(Other.autos.through)
+        reveal_type(Other.autos.through.objects.get())
+
+        reveal_type(Other().autos.custom_qs_method())
+        reveal_type(Other().customs.custom_qs_method())
+        reveal_type(Other().autos.add)
+
+        reveal_type(Other.autos.through.objects)
+        reveal_type(Other.autos.through._default_manager)
+
+        reveal_type(MyModel().auto_through)
+        reveal_type(MyModel().auto_through.through)
+        reveal_type(MyModel().auto_through.through.mymodel_id)
+        reveal_type(MyModel().other_again)
+        reveal_type(MyModel().other_again.through)
+        reveal_type(MyModel().other_again.through.mymodel_id)
+        reveal_type(MyModel().custom_through)
+        reveal_type(MyModel().custom_through.through)
+        reveal_type(MyModel().custom_through.through.my_model_id)
+    out: |
+        main:2: note: Revealed type is "myapp.models.MyModel_auto_through"
+        main:3: note: Revealed type is "myapp.models.Other"
+        main:4: note: Revealed type is "myapp.models.MyModel"
+        main:6: note: Revealed type is "myapp.models.CustomThrough"
+        main:7: note: Revealed type is "myapp.models.Other"
+        main:8: note: Revealed type is "builtins.int"
+        main:9: note: Revealed type is "myapp.models.MyModel"
+        main:12: note: Revealed type is "builtins.int"
+        main:13: note: Revealed type is "builtins.int"
+        main:14: note: Revealed type is "myapp.models.MyModel"
+        main:15: note: Revealed type is "builtins.int"
+        main:16: note: Revealed type is "myapp.models.Other"
+        main:17: note: Revealed type is "builtins.int"
+        main:19: note: Revealed type is "Type[myapp.models.MyModel_auto_through]"
+        main:20: note: Revealed type is "django.db.models.fields.related_descriptors.ForwardManyToOneDescriptor[django.db.models.fields.related.ForeignKey[Union[myapp.models.MyModel, django.db.models.expressions.Combinable], myapp.models.MyModel]]"
+        main:21: note: Revealed type is "django.db.models.manager.Manager[myapp.models.MyModel_auto_through]"
+        main:23: note: Revealed type is "Type[myapp.models.MyModel_other_again]"
+        main:24: note: Revealed type is "django.db.models.fields.related_descriptors.ManyToManyDescriptor[myapp.models.MyModel, myapp.models.MyModel_auto_through]"
+        main:25: note: Revealed type is "Type[myapp.models.MyModel_auto_through]"
+        main:26: note: Revealed type is "myapp.models.MyModel_auto_through"
+        main:28: note: Revealed type is "builtins.str"
+        main:29: note: Revealed type is "builtins.str"
+        main:30: note: Revealed type is "def (*objs: Union[myapp.models.MyModel, builtins.int], through_defaults: Union[typing.Mapping[builtins.str, Any], None] =)"
+        main:32: note: Revealed type is "django.db.models.manager.Manager[myapp.models.MyModel_auto_through]"
+        main:33: note: Revealed type is "django.db.models.manager.Manager[myapp.models.MyModel_auto_through]"
+        main:35: note: Revealed type is "myapp.models.Other_ManyRelatedManager[myapp.models.MyModel_auto_through]"
+        main:36: note: Revealed type is "Type[myapp.models.MyModel_auto_through]"
+        main:37: note: Revealed type is "django.db.models.fields._FieldDescriptor[django.db.models.fields.AutoField[Union[django.db.models.expressions.Combinable, builtins.int, builtins.str, None], builtins.int]]"
+        main:38: note: Revealed type is "myapp.models.Other_ManyRelatedManager[myapp.models.MyModel_other_again]"
+        main:39: note: Revealed type is "Type[myapp.models.MyModel_other_again]"
+        main:40: note: Revealed type is "django.db.models.fields._FieldDescriptor[django.db.models.fields.AutoField[Union[django.db.models.expressions.Combinable, builtins.int, builtins.str, None], builtins.int]]"
+        main:41: note: Revealed type is "myapp.models.Other_ManyRelatedManager[myapp.models.CustomThrough]"
+        main:42: note: Revealed type is "Type[myapp.models.CustomThrough]"
+        main:43: note: Revealed type is "django.db.models.fields._FieldDescriptor[django.db.models.fields.AutoField[Union[django.db.models.expressions.Combinable, builtins.int, builtins.str], builtins.int]]"
+    installed_apps:
+        -   myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from django.db import models
+
+                class Other(models.Model):
+                    ...
+
+                class CustomThroughQuerySet(models.QuerySet["CustomThrough"]):
+                    def custom_qs_method(self) -> int:
+                        return 1
+
+                CustomThroughManager = models.Manager.from_queryset(CustomThroughQuerySet)
+                class CustomThrough(models.Model):
+                    other = models.ForeignKey(Other, on_delete=models.CASCADE)
+                    my_model = models.ForeignKey("myapp.MyModel", on_delete=models.CASCADE)
+
+                    objects = CustomThroughManager()
+
+                class MyModelQuerySet(models.QuerySet["MyModel"]):
+                    def custom_qs_method(self) -> str:
+                        return "abc"
+
+                MyModelManager = models.Manager.from_queryset(MyModelQuerySet)
+                class MyModel(models.Model):
+                    auto_through = models.ManyToManyField(Other, related_name="autos")
+                    # Have multiple M2Ms with implicit through
+                    other_again = models.ManyToManyField(Other, related_name="others_again")
+                    custom_through = models.ManyToManyField(Other, through=CustomThrough, related_name="customs")
+
+                    objects = MyModelManager()
+
+-   case: test_many_to_many_with_lazy_references
+    main: |
+        from first.models import First
+        reveal_type(First().thirds.get())
+        reveal_type(First.thirds.through.objects.get())
+        reveal_type(First.thirds.through.objects.get().first)
+        reveal_type(First.thirds.through.objects.get().third)
+
+        from third.models import Third
+        reveal_type(Third().fourths.get())
+        reveal_type(Third.fourths.through.objects.get())
+    out: |
+        main:2: note: Revealed type is "third.models.Third"
+        main:3: note: Revealed type is "second.models.Second"
+        main:4: note: Revealed type is "first.models.First"
+        main:5: note: Revealed type is "third.models.Third"
+        main:8: note: Revealed type is "third.models.Fourth"
+        main:9: note: Revealed type is "third.models.Third_fourths"
+    installed_apps:
+        -   first
+        -   second
+        -   third
+    files:
+        -   path: first/__init__.py
+        -   path: first/models/__init__.py
+            content: |
+                from django.db import models
+
+                class First(models.Model):
+                    thirds = models.ManyToManyField("third.Third", through="second.Second")
+        -   path: second/__init__.py
+        -   path: second/models/__init__.py
+            content: |
+                from django.db import models
+
+                class Second(models.Model):
+                    first = models.ForeignKey("first.First", on_delete=models.CASCADE)
+                    third = models.ForeignKey("third.Third", on_delete=models.CASCADE)
+        -   path: third/__init__.py
+        -   path: third/models/__init__.py
+            content: |
+                from django.db import models
+
+                class Third(models.Model):
+                    fourths = models.ManyToManyField("third.Fourth", blank=True)
+
+                class Fourth(models.Model):
+                    ...
+
+-   case: test_many_to_many_lazy_references_with_implicit_app_label
+    main: |
+        from myapp.models import Child
+        reveal_type(Child.parents)
+        reveal_type(Child().parents)
+    out: |
+        main:2: note: Revealed type is "django.db.models.fields.related_descriptors.ManyToManyDescriptor[Any, Any]"
+        main:3: note: Revealed type is "django.db.models.fields.related_descriptors.ManyRelatedManager[Any, Any]"
+        myapp/models/child:5: error: Need type annotation for "parents"  [var-annotated]
+        myapp/models/child:6: error: Need type annotation for "other_parents"  [var-annotated]
+    installed_apps:
+        -   myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models/__init__.py
+            content: |
+                from .child import Child as Child
+                from .parent import Parent as Parent
+        -   path: myapp/models/parent.py
+            content: |
+                from django.db import models
+
+                class Parent(models.Model):
+                    ...
+        -   path: myapp/models/child.py
+            content: |
+                from django.db import models
+
+                class Child(models.Model):
+                    # Reference without explicit app label
+                    parents = models.ManyToManyField("Parent")
+                    other_parents = models.ManyToManyField(to="Parent")
+
+-   case: test_relations_with_bad_arguments
+    main: |
+        from myapp.models import MyModel
+        from typing import Type
+        def f(arg: Type[MyModel]) -> MyModel:
+            instance = arg(field=1, unknown=2)
+            reveal_type(instance.field)  # N: Revealed type is "Any"
+            reveal_type(instance.unknown)  # N: Revealed type is "Any"
+            reveal_type(instance.bad)  # N: Revealed type is "django.db.models.fields.related_descriptors.ManyRelatedManager[Any, Any]"
+            return instance
+    installed_apps:
+        -   myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+
+                class MyModel(models.Model):
+                    field = models.ForeignKey("slef", on_delete=models.CASCADE)  # E: Cannot find model 'slef' referenced in field 'field'  [misc]
+                    unknown = models.OneToOneField("unknown", on_delete=models.CASCADE)  # E: Cannot find model 'unknown' referenced in field 'unknown'  [misc]
+                    bad = models.ManyToManyField("bad")  # E: Need type annotation for "bad"  [var-annotated]
+
+-   case: test_reverse_of_inherited_many_to_many_fields
+    main: |
+        from myapp.models import Other
+        other = Other()
+        reveal_type(other.abstract_of_concrete_parent)  # N: Revealed type is "myapp.models.ConcreteParent_ManyRelatedManager[myapp.models.ConcreteParent_m2m_1]"
+        reveal_type(other.concrete_parent)  # N: Revealed type is "myapp.models.ConcreteParent_ManyRelatedManager[myapp.models.ConcreteParent_m2m_2]"
+        reveal_type(other.abstract_of_abstract_parent)  # N: Revealed type is "myapp.models.MyModel_ManyRelatedManager[myapp.models.MyModel_m2m_3]"
+        reveal_type(other.abstract_parent)  # N: Revealed type is "myapp.models.MyModel_ManyRelatedManager[myapp.models.MyModel_m2m_4]"
+        reveal_type(other.mymodel)  # N: Revealed type is "myapp.models.MyModel_ManyRelatedManager[myapp.models.MyModel_m2m_5]"
+    installed_apps:
+        -   myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+
+                class Other(models.Model):
+                    ...
+
+                class AbstractOfConcreteParent(models.Model):
+                    m2m_1 = models.ManyToManyField(Other, related_name="abstract_of_concrete_parent")
+                    class Meta:
+                        abstract = True
+
+                class ConcreteParent(AbstractOfConcreteParent):
+                    m2m_2 = models.ManyToManyField(Other, related_name="concrete_parent")
+
+                class AbstractOfAbstractParent(models.Model):
+                    m2m_3 = models.ManyToManyField(Other, related_name="abstract_of_abstract_parent")
+                    class Meta:
+                        abstract = True
+
+                class AbstractParent(AbstractOfAbstractParent):
+                    m2m_4 = models.ManyToManyField(Other, related_name="abstract_parent")
+                    class Meta:
+                        abstract = True
+
+                class MyModel(ConcreteParent, AbstractParent):
+                    m2m_5 = models.ManyToManyField(Other, related_name="mymodel")
+
+-   case: test_m2m_related_managers_supports_renamed_imports
+    main: |
+        from myapp.models import MyModel
+        from other.models import Other
+        reveal_type(MyModel.m2m_1.through.objects)  # N: Revealed type is "django.db.models.manager.Manager[myapp.models.MyModel_m2m_1]"
+        reveal_type(Other.auto_through.through.objects)  # N: Revealed type is "django.db.models.manager.Manager[myapp.models.MyModel_m2m_1]"
+        reveal_type(MyModel.m2m_2.through.objects)  # N: Revealed type is "django.db.models.manager.Manager[myapp.models.Through]"
+        reveal_type(Other.custom_through.through.objects)  # N: Revealed type is "django.db.models.manager.Manager[myapp.models.Through]"
+    installed_apps:
+        -   other
+        -   myapp
+    files:
+        -   path: other/__init__.py
+        -   path: other/models.py
+            content: |
+                from django.db import models
+
+                class Other(models.Model):
+                    ...
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                from other import models as other_models
+
+                class Through(models.Model):
+                    mymodel = models.ForeignKey("myapp.MyModel", on_delete=models.CASCADE)
+                    other = models.ForeignKey(other_models.Other, on_delete=models.CASCADE)
+
+                class MyModel(models.Model):
+                    m2m_1 = models.ManyToManyField(other_models.Other, related_name="auto_through")
+                    m2m_2 = models.ManyToManyField(other_models.Other, related_name="custom_through", through=Through)
+
+-   case: test_m2m_from_abstract_model
+    main: |
+        from myapp.models import First, Second
+        reveal_type(First().others)  # N: Revealed type is "myapp.models.Other_ManyRelatedManager[myapp.models.First_others]"
+        reveal_type(First().others.get())  # N: Revealed type is "myapp.models.Other"
+        reveal_type(First.others)  # N: Revealed type is "django.db.models.fields.related_descriptors.ManyToManyDescriptor[myapp.models.Other, myapp.models.First_others]"
+        reveal_type(First.others.through)  # N: Revealed type is "Type[myapp.models.First_others]"
+        reveal_type(First.others.through.objects.get())  # N: Revealed type is "myapp.models.First_others"
+
+        reveal_type(Second().others)  # N: Revealed type is "myapp.models.Other_ManyRelatedManager[myapp.models.Second_others]"
+        reveal_type(Second().others.get())  # N: Revealed type is "myapp.models.Other"
+        reveal_type(Second.others)  # N: Revealed type is "django.db.models.fields.related_descriptors.ManyToManyDescriptor[myapp.models.Other, myapp.models.Second_others]"
+        reveal_type(Second.others.through)  # N: Revealed type is "Type[myapp.models.Second_others]"
+        reveal_type(Second.others.through.objects.get())  # N: Revealed type is "myapp.models.Second_others"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Other(models.Model):
+                    ...
+
+                class Parent(models.Model):
+                    others = models.ManyToManyField(Other)
+
+                    class Meta:
+                        abstract = True
+
+                class First(Parent):
+                    ...
+
+                class Second(Parent):
+                    ...
+
+-   case: test_m2m_self_on_abstract_model
+    main: |
+        from myapp.models import First, Second
+        reveal_type(First().others)  # N: Revealed type is "myapp.models.First_ManyRelatedManager[myapp.models.First_others]"
+        reveal_type(First().others.get())  # N: Revealed type is "myapp.models.First"
+        reveal_type(First.others)  # N: Revealed type is "django.db.models.fields.related_descriptors.ManyToManyDescriptor[myapp.models.First, myapp.models.First_others]"
+        reveal_type(First.others.through)  # N: Revealed type is "Type[myapp.models.First_others]"
+        reveal_type(First.others.through.objects.get())  # N: Revealed type is "myapp.models.First_others"
+
+        reveal_type(Second().others)  # N: Revealed type is "myapp.models.Second_ManyRelatedManager[myapp.models.Second_others]"
+        reveal_type(Second().others.get())  # N: Revealed type is "myapp.models.Second"
+        reveal_type(Second.others)  # N: Revealed type is "django.db.models.fields.related_descriptors.ManyToManyDescriptor[myapp.models.Second, myapp.models.Second_others]"
+        reveal_type(Second.others.through)  # N: Revealed type is "Type[myapp.models.Second_others]"
+        reveal_type(Second.others.through.objects.get())  # N: Revealed type is "myapp.models.Second_others"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Parent(models.Model):
+                    others = models.ManyToManyField("self")
+
+                    class Meta:
+                        abstract = True
+
+                class First(Parent):
+                    ...
+
+                class Second(Parent):
+                    ...
+
+-   case: test_m2m_models_manager_filter_kwargs_checked
+    main: |
+        from myapp.models import MyModel, Other
+        MyModel.objects.filter(xyz__isnull=False)  # E: Cannot resolve keyword 'xyz' into field. Choices are: id, others  [misc]
+        MyModel.objects.get(xyz__isnull=False)  # E: Cannot resolve keyword 'xyz' into field. Choices are: id, others  [misc]
+        MyModel.objects.exclude(xyz__isnull=False)  # E: Cannot resolve keyword 'xyz' into field. Choices are: id, others  [misc]
+        other = Other()
+        other.mymodel_set.filter(xyz__isnull=True)  # E: Cannot resolve keyword 'xyz' into field. Choices are: id, others  [misc]
+        other.mymodel_set.get(xyz__isnull=True)  # E: Cannot resolve keyword 'xyz' into field. Choices are: id, others  [misc]
+        other.mymodel_set.exclude(xyz__isnull=True)  # E: Cannot resolve keyword 'xyz' into field. Choices are: id, others  [misc]
+        MyModel.others.through.objects.filter(xyz__isnull=False)  # E: Cannot resolve keyword 'xyz' into field. Choices are: id, mymodel, mymodel_id, other, other_id  [misc]
+        MyModel.others.through.objects.get(xyz__isnull=False)  # E: Cannot resolve keyword 'xyz' into field. Choices are: id, mymodel, mymodel_id, other, other_id  [misc]
+        MyModel.others.through.objects.exclude(xyz__isnull=False)  # E: Cannot resolve keyword 'xyz' into field. Choices are: id, mymodel, mymodel_id, other, other_id  [misc]
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Other(models.Model):
+                    ...
+
+                class MyModel(models.Model):
+                    others = models.ManyToManyField(Other)
+
+-   case: test_reverse_m2m_relation_checks_other_model
+    main: |
+        from myapp.models import Author
+        # With builtin manager/queryset
+        Author().book_set.filter(featured=True)
+        Author().book_set.filter(xyz=True)  # E: Cannot resolve keyword 'xyz' into field. Choices are: authors, featured, id  [misc]
+        reveal_type(Author().book_set.values_list("featured"))  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Book, Tuple[builtins.bool]]"
+        Author().book_set.values_list("xyz")  # E: Cannot resolve keyword 'xyz' into field. Choices are: authors, featured, id  [misc]
+        reveal_type(Author().book_set.values("featured"))  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Book, TypedDict({'featured': builtins.bool})]"
+        Author().book_set.values("xyz")  # E: Cannot resolve keyword 'xyz' into field. Choices are: authors, featured, id  [misc]
+        reveal_type(Author().book_set.filter(featured=True).values_list("featured"))  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Book, Tuple[builtins.bool]]"
+        Author().book_set.filter(featured=True).values_list("xyz")  # E: Cannot resolve keyword 'xyz' into field. Choices are: authors, featured, id  [misc]
+        reveal_type(Author().book_set.filter(featured=True).values("featured"))  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Book, TypedDict({'featured': builtins.bool})]"
+        Author().book_set.filter(featured=True).values("xyz")  # E: Cannot resolve keyword 'xyz' into field. Choices are: authors, featured, id  [misc]
+
+        # With a custom manager/queryset
+        Author().other_set.filter(featured=True)
+        Author().other_set.filter(xyz=True)  # E: Cannot resolve keyword 'xyz' into field. Choices are: authors, featured, id  [misc]
+        reveal_type(Author().other_set.values_list("featured"))  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Other, Tuple[builtins.bool]]"
+        Author().other_set.values_list("xyz")  # E: Cannot resolve keyword 'xyz' into field. Choices are: authors, featured, id  [misc]
+        reveal_type(Author().other_set.values("featured"))  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Other, TypedDict({'featured': builtins.bool})]"
+        Author().other_set.values("xyz")  # E: Cannot resolve keyword 'xyz' into field. Choices are: authors, featured, id  [misc]
+        reveal_type(Author().other_set.filter(featured=True).values_list("featured"))  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Other, Tuple[builtins.bool]]"
+        Author().other_set.filter(featured=True).values_list("xyz")  # E: Cannot resolve keyword 'xyz' into field. Choices are: authors, featured, id  [misc]
+        reveal_type(Author().other_set.filter(featured=True).values("featured"))  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Other, TypedDict({'featured': builtins.bool})]"
+        Author().other_set.filter(featured=True).values("xyz")  # E: Cannot resolve keyword 'xyz' into field. Choices are: authors, featured, id  [misc]
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from typing_extensions import Self
+                from django.db import models
+
+                class Author(models.Model):
+                    ...
+
+                class Book(models.Model):
+                    featured = models.BooleanField(default=False)
+                    authors = models.ManyToManyField(Author)
+
+                class OtherQuerySet(models.QuerySet["Other"]):
+                    def custom(self) -> Self: ...
+
+                OtherManager = models.Manager.from_queryset(OtherQuerySet)
+                class Other(models.Model):
+                    featured = models.BooleanField()
+                    authors = models.ManyToManyField(Author)
+                    objects = OtherManager()
+
+-   case: test_many_to_many_field_null
+    main: |
+        from django.db import models
+        class Person(models.Model):
+            friends = models.ManyToManyField("self", null=True, blank=True)
+
+        p: Person
+        reveal_type(p.friends)  # N: Revealed type is "django.db.models.fields.related_descriptors.ManyRelatedManager[main.Person, main.Person_friends]"

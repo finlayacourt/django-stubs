@@ -1,0 +1,97 @@
+-   case: meta_attribute_has_a_type_of_current_model
+    main: |
+        from myapp.models import MyUser
+        reveal_type(MyUser._meta)  # N: Revealed type is "django.db.models.options.Options[myapp.models.MyUser]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class MyUser(models.Model):
+                    pass
+
+-   case: get_field_returns_proper_field_type
+    main: |
+        from myapp.models import MyUser
+        reveal_type(MyUser._meta.get_field('base_name'))  # N: Revealed type is "django.db.models.fields.CharField[Any, Any]"
+        reveal_type(MyUser._meta.get_field('name'))  # N: Revealed type is "django.db.models.fields.CharField[Any, Any]"
+        reveal_type(MyUser._meta.get_field('age'))  # N: Revealed type is "django.db.models.fields.IntegerField[Any, Any]"
+        reveal_type(MyUser._meta.get_field('to_user'))  # N: Revealed type is "django.db.models.fields.related.ForeignKey[Any, Any]"
+
+        MyUser._meta.get_field('unknown')  # E: MyUser has no field named 'unknown'  [misc]
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class MyBaseUser(models.Model):
+                    base_name = models.CharField(max_length=100)
+                class MyUser(MyBaseUser):
+                    name = models.CharField(max_length=100)
+                    age = models.IntegerField()
+                    to_user = models.ForeignKey('self', on_delete=models.SET_NULL)
+
+-   case: get_field_with_abstract_inheritance
+    main: |
+        from myapp.models import AbstractModel
+        class MyModel(AbstractModel):
+            pass
+        reveal_type(MyModel._meta.get_field('field'))  # N: Revealed type is "Union[django.db.models.fields.Field[Any, Any], django.db.models.fields.reverse_related.ForeignObjectRel, django.contrib.contenttypes.fields.GenericForeignKey]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                from django.contrib.postgres.fields import ArrayField
+                from django_stubs_ext.db.models import TypedModelMeta
+                class AbstractModel(models.Model):
+                    class Meta(TypedModelMeta):
+                        abstract = True
+                class MyModel(AbstractModel):
+                    field = ArrayField(models.IntegerField(), default=[])
+-   case: base_model_meta_incompatible_types
+    main: |
+        from django.db import models
+        from django.contrib.postgres.fields import ArrayField
+        from django_stubs_ext.db.models import TypedModelMeta
+
+        class MyModel(models.Model):
+            example = models.CharField(max_length=100)
+            class Meta(TypedModelMeta):
+                abstract = 7  # E: Incompatible types in assignment (expression has type "int", base class "TypedModelMeta" defined the type as "bool")  [assignment]
+                verbose_name = ['test']  # E: Incompatible types in assignment (expression has type "List[str]", base class "TypedModelMeta" defined the type as "Union[str, _StrPromise]")  [assignment]
+                unique_together = {1: 2}  # E: Incompatible types in assignment (expression has type "Dict[int, int]", base class "TypedModelMeta" defined the type as "Union[Sequence[Sequence[str]], Sequence[str]]")  [assignment]
+                unknown_attr = True  # can't check this
+
+
+-   case: instantiate_abstract_model
+    main: |
+        from myapp.models import AbstractModel, MyModel
+
+        # Should not raise:
+        MyModel(field=1)
+        MyModel.objects.create(field=2)
+        AbstractModel._default_manager.create()
+
+        # Errors:
+        AbstractModel()  # E: Cannot instantiate abstract class "AbstractModel" with abstract attributes "DoesNotExist" and "MultipleObjectsReturned"  [abstract]
+        AbstractModel.objects.create()  # E: "Type[AbstractModel]" has no attribute "objects"  [attr-defined]
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class AbstractModel(models.Model):
+                    class Meta:
+                        abstract = True
+                    base = models.TextField()
+                class MyModel(AbstractModel):
+                    field = models.IntegerField()

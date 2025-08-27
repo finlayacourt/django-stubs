@@ -1,6 +1,0 @@
-class AdminConfig:
-    def ready(self) -> None: ...
-
-
-class SimpleAdminConfig:
-    def ready(self) -> None: ...

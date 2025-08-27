@@ -1,9 +1,0 @@
-from django.utils.functional import SimpleLazyObject
-
-
-def get_migration_name_timestamp() -> str: ...
-
-
-class RegexObject:
-    def __eq__(self, other: RegexObject) -> bool: ...
-    def __init__(self, obj: SimpleLazyObject) -> None: ...

@@ -1,0 +1,199 @@
+-   case: test_related_name_custom_manager
+    main: |
+      from app1.models import Model1
+      from app2.models import Model2
+
+      reveal_type(Model1().test)  # N: Revealed type is "app3.models.Model3_RelatedManager"
+      reveal_type(Model2().test)  # N: Revealed type is "app3.models.Model3_RelatedManager"
+      reveal_type(Model1().test2)  # N: Revealed type is "app3.models.Model4_RelatedManager"
+      reveal_type(Model2().test2)  # N: Revealed type is "app3.models.Model4_RelatedManager"
+    installed_apps:
+      - base
+      - users
+      - app1
+      - app2
+      - app3
+    files:
+      - path: base/__init__.py
+      - path: base/models.py
+        content: |
+          from django.db import models
+          class OwnedModel(models.Model):
+              owner = models.ForeignKey("users.User", on_delete=models.CASCADE)
+
+              class Meta:
+                  abstract = True
+
+      - path: users/__init__.py
+      - path: users/models.py
+        content: |
+          from django.db import models
+          class User(models.Model):
+              pass
+
+      - path: app1/__init__.py
+      - path: app1/models.py
+        content: |
+          from django.db import models
+          from base.models import OwnedModel
+          from typing import TYPE_CHECKING
+          if TYPE_CHECKING:
+              from app3.models import Model3
+
+          class CustomQuerySet(models.QuerySet):
+              pass
+
+          Model1Manager = models.Manager.from_queryset(CustomQuerySet)
+          class Model1(OwnedModel):
+              objects = Model1Manager()
+
+      - path: app2/__init__.py
+      - path: app2/models.py
+        content: |
+          from django.db import models
+          from base.models import OwnedModel
+          from typing import TYPE_CHECKING
+          if TYPE_CHECKING:
+              from app3.models import Model3
+
+          class CustomQuerySet(models.QuerySet):
+              pass
+
+          Model2Manager = models.Manager.from_queryset(CustomQuerySet)
+          class Model2(OwnedModel):
+              objects = Model2Manager()
+
+      - path: app3/__init__.py
+      - path: app3/models.py
+        content: |
+          from django.db import models
+          from app1.models import Model1
+          from app2.models import Model2
+          from base.models import OwnedModel
+
+          class CustomQuerySet(models.QuerySet):
+              pass
+
+          Model3Manager = models.Manager.from_queryset(CustomQuerySet)
+          class Model3(OwnedModel):
+              a = models.ForeignKey(Model1, related_name="test", on_delete=models.CASCADE)
+              b = models.ForeignKey(Model2, related_name="test", on_delete=models.CASCADE)
+
+              objects = Model3Manager()
+
+          Model4Manager = models.Manager.from_queryset(CustomQuerySet)
+          class Model4(OwnedModel):
+              a = models.ForeignKey(Model1, related_name="test2", on_delete=models.CASCADE)
+              b = models.ForeignKey(Model2, related_name="test2", on_delete=models.CASCADE)
+
+              objects = Model4Manager()
+
+-   case: test_related_name_foreign_object_multi_column
+    main: |
+      from app1.models import Model1, Model2
+
+      reveal_type(Model2.model_1.field) # N: Revealed type is "django.db.models.fields.related.ForeignObject[app1.models.Model1, app1.models.Model1]"
+      reveal_type(Model2().model_1) # N: Revealed type is "app1.models.Model1"
+      reveal_type(Model1.model_2s) # N: Revealed type is "django.db.models.fields.related_descriptors.ReverseManyToOneDescriptor[app1.models.Model2]"
+      reveal_type(Model1().model_2s) # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[app1.models.Model2]"
+
+    installed_apps:
+      - app1
+    files:
+      - path: app1/__init__.py
+      - path: app1/models.py
+        content: |
+          from django.db import models
+          from django.db.models.fields.related import ForeignObject
+
+          class Model1(models.Model):
+              type = models.TextField()
+              ref = models.TextField()
+
+          class Model2(models.Model):
+              name = models.TextField()
+
+              model_1_type = models.TextField()
+              model_2_ref = models.TextField()
+
+              model_1 = ForeignObject(
+                  Model1,
+                  to_fields=["type", "ref"],
+                  from_fields=["model_1_type", "model_2_ref"],
+                  on_delete=models.CASCADE,
+                  related_name="model_2s",
+              )
+
+- case: test_processes_other_relations_when_one_field_is_broken
+  main: |
+        from myapp.models import MyModel
+        reveal_type(MyModel().others)  # N: Revealed type is "django.db.models.fields.related_descriptors.RelatedManager[myapp.models.Other]"
+  installed_apps:
+    - myapp
+  files:
+    - path: myapp/__init__.py
+    - path: myapp/models.py
+      content: |
+        from django.db import models
+
+        class MyModel(models.Model):
+            # Plugin doesn't handle lazy reference without app label
+            broken = models.ManyToManyField("MyModel", related_name="mymodels")  # type: ignore[var-annotated]
+
+        class Other(models.Model):
+            field = models.ForeignKey(MyModel, related_name="others", on_delete=models.CASCADE)
+
+
+- case: test_related_fields_with_two_generic_parameters
+  main: |
+        from myapp.models import Address, School, Student
+        reveal_type(Student().school)  # N: Revealed type is "myapp.models.School"
+        reveal_type(Student().address)  # N: Revealed type is "myapp.models.Address"
+        s = Student()
+        s.school = School()
+        s.address = Address()
+  installed_apps:
+    - myapp
+  files:
+    - path: myapp/__init__.py
+    - path: myapp/models.py
+      content: |
+        from django.db import models
+
+        class School(models.Model):
+            pass
+
+        class Address(models.Model):
+            pass
+
+        class Student(models.Model):
+            school = models.ForeignKey["School","School"](to="School", on_delete=models.CASCADE)
+            address = models.OneToOneField["Address","Address"](to="Address", on_delete=models.CASCADE)
+
+
+- case: test_related_fields_with_one_generic_parameter
+  expect_fail: True
+  main: |
+        from myapp.models import Address, School, Student
+        reveal_type(Student().school)  # N: Revealed type is "myapp.models.School"
+        reveal_type(Student().address)  # N: Revealed type is "myapp.models.Address"
+        s = Student()
+        s.school = School()
+        s.address = Address()
+  installed_apps:
+    - myapp
+  files:
+    - path: myapp/__init__.py
+    - path: myapp/models.py
+      content: |
+        from django.db import models
+
+        class School(models.Model):
+            pass
+
+        class Address(models.Model):
+            pass
+
+        class Student(models.Model):
+            school = models.ForeignKey["School"](to="School", on_delete=models.CASCADE)
+            address = models.OneToOneField["Address"](to="Address", on_delete=models.CASCADE)
