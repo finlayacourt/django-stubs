@@ -1,3 +1,5 @@
+> **Note:** This repository is a maintained fork. See [FORK.md](./FORK.md) for details on differences from upstream.
+
 <img src="https://raw.githubusercontent.com/typeddjango/django-stubs/master/logo.svg" alt="django-stubs">
 
 [![test](https://github.com/typeddjango/django-stubs/actions/workflows/test.yml/badge.svg?branch=master&event=push)](https://github.com/typeddjango/django-stubs/actions/workflows/test.yml)
