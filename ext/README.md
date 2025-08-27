@@ -1,9 +1,8 @@
 # Extensions and monkey-patching for django-stubs
 
-[![Build status](https://github.com/typeddjango/django-stubs/workflows/test/badge.svg?branch=master&event=push)](https://github.com/typeddjango/django-stubs/actions?query=workflow%3Atest)
+[![test](https://github.com/typeddjango/django-stubs/actions/workflows/test.yml/badge.svg?branch=master&event=push)](https://github.com/typeddjango/django-stubs/actions/workflows/test.yml)
 [![Checked with mypy](http://www.mypy-lang.org/static/mypy_badge.svg)](http://mypy-lang.org/)
-[![Gitter](https://badges.gitter.im/mypy-django/Lobby.svg)](https://gitter.im/mypy-django/Lobby)
-
+[![StackOverflow](https://shields.io/badge/ask-stackoverflow-orange?logo=stackoverflow)](https://stackoverflow.com/questions/tagged/django-stubs?tab=Active)
 
 This package contains extensions and monkey-patching functions for the [django-stubs](https://github.com/typeddjango/django-stubs) package. Certain features of django-stubs (i.e. generic django classes that don't define the `__class_getitem__` method) require runtime monkey-patching, which can't be done with type stubs. These extensions were split into a separate package so library consumers don't need `mypy` as a runtime dependency ([#526](https://github.com/typeddjango/django-stubs/pull/526#pullrequestreview-525798031)).
 
@@ -39,9 +38,6 @@ def __class_getitem__(cls, *args, **kwargs):
 ## To get help
 
 For help with django-stubs, please view the main repository at <https://github.com/typeddjango/django-stubs>
-
-We have a Gitter chat here: <https://gitter.im/mypy-django/Lobby>
-If you think you have a more generic typing issue, please refer to <https://github.com/python/mypy> and their Gitter.
 
 ## Contributing
 

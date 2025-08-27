@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from collections.abc import Sequence
 
 from django.core.exceptions import FieldError
@@ -6,35 +5,14 @@ from django.db.models.base import Model
 from django.db.models.fields.related import RelatedField
 from django.db.models.fields.reverse_related import ForeignObjectRel
 from mypy.checker import TypeChecker
-from mypy.nodes import ARG_NAMED, ARG_NAMED_OPT, Expression
+from mypy.nodes import ARG_NAMED, ARG_NAMED_OPT, CallExpr, Expression
 from mypy.plugin import FunctionContext, MethodContext
 from mypy.types import AnyType, Instance, TupleType, TypedDictType, TypeOfAny, get_proper_type
 from mypy.types import Type as MypyType
-from mypy.typevars import fill_typevars
 
 from mypy_django_plugin.django.context import DjangoContext, LookupsAreUnsupported
 from mypy_django_plugin.lib import fullnames, helpers
-from mypy_django_plugin.lib.helpers import parse_bool
 from mypy_django_plugin.transformers.models import get_annotated_type
-
-
-def _extract_model_type_from_queryset(queryset_type: Instance, api: TypeChecker) -> Instance | None:
-    if queryset_type.type.has_base(fullnames.MANAGER_CLASS_FULLNAME):
-        to_model_fullname = helpers.get_manager_to_model(queryset_type.type)
-        if to_model_fullname is not None:
-            to_model = helpers.lookup_fully_qualified_typeinfo(api, to_model_fullname)
-            if to_model is not None:
-                to_model_instance = fill_typevars(to_model)
-                assert isinstance(to_model_instance, Instance)
-                return to_model_instance
-
-    for base_type in [queryset_type, *queryset_type.type.bases]:
-        if not len(base_type.args):
-            continue
-        model = get_proper_type(base_type.args[0])
-        if isinstance(model, Instance) and helpers.is_model_type(model.type):
-            return model
-    return None
 
 
 def determine_proper_manager_type(ctx: FunctionContext) -> MypyType:
@@ -50,7 +28,7 @@ def determine_proper_manager_type(ctx: FunctionContext) -> MypyType:
     ):
         return default_return_type
 
-    return helpers.reparametrize_instance(default_return_type, [outer_model_info.self_type])
+    return default_return_type.copy_modified(args=[outer_model_info.self_type])
 
 
 def get_field_type_from_lookup(
@@ -109,7 +87,7 @@ def get_values_list_row_type(
             assert lookup_type is not None
             return lookup_type
         elif named:
-            column_types: OrderedDict[str, MypyType] = OrderedDict()
+            column_types: dict[str, MypyType] = {}
             for field in django_context.get_model_fields(model_cls):
                 column_type = django_context.get_field_get_type(
                     typechecker_api, model_info, field, method="values_list"
@@ -137,7 +115,7 @@ def get_values_list_row_type(
         typechecker_api.fail("'flat' is not valid when 'values_list' is called with more than one field", ctx.context)
         return AnyType(TypeOfAny.from_error)
 
-    column_types = OrderedDict()
+    column_types = {}
     for field_lookup in field_lookups:
         lookup_field_type = get_field_type_from_lookup(
             ctx, django_context, model_cls, lookup=field_lookup, method="values_list", silent_on_error=is_annotated
@@ -164,50 +142,25 @@ def get_values_list_row_type(
 
 
 def extract_proper_type_queryset_values_list(ctx: MethodContext, django_context: DjangoContext) -> MypyType:
-    # called on the Instance, returns QuerySet of something
-    if not isinstance(ctx.type, Instance):
+    django_model = helpers.get_model_info_from_qs_ctx(ctx, django_context)
+    if django_model is None:
         return ctx.default_return_type
+
     default_return_type = get_proper_type(ctx.default_return_type)
     if not isinstance(default_return_type, Instance):
         return ctx.default_return_type
 
-    model_type = _extract_model_type_from_queryset(ctx.type, helpers.get_typechecker_api(ctx))
-    if model_type is None:
-        return AnyType(TypeOfAny.from_omitted_generics)
-
-    is_annotated = helpers.is_annotated_model(model_type.type)
-    model_cls = (
-        django_context.get_model_class_by_fullname(model_type.type.bases[0].type.fullname)
-        if is_annotated
-        else django_context.get_model_class_by_fullname(model_type.type.fullname)
-    )
-    if model_cls is None:
-        return default_return_type
-
-    flat_expr = helpers.get_call_argument_by_name(ctx, "flat")
-    if flat_expr is not None:
-        flat = parse_bool(flat_expr)
-    else:
-        flat = False
-
-    named_expr = helpers.get_call_argument_by_name(ctx, "named")
-    if named_expr is not None:
-        named = parse_bool(named_expr)
-    else:
-        named = False
+    flat = helpers.get_bool_call_argument_by_name(ctx, "flat", default=False)
+    named = helpers.get_bool_call_argument_by_name(ctx, "named", default=False)
 
     if flat and named:
         ctx.api.fail("'flat' and 'named' can't be used together", ctx.context)
-        return helpers.reparametrize_instance(default_return_type, [model_type, AnyType(TypeOfAny.from_error)])
-
-    # account for possible None
-    flat = flat or False
-    named = named or False
+        return default_return_type.copy_modified(args=[django_model.typ, AnyType(TypeOfAny.from_error)])
 
     row_type = get_values_list_row_type(
-        ctx, django_context, model_cls, is_annotated=is_annotated, flat=flat, named=named
+        ctx, django_context, django_model.cls, is_annotated=django_model.is_annotated, flat=flat, named=named
     )
-    return helpers.reparametrize_instance(default_return_type, [model_type, row_type])
+    return default_return_type.copy_modified(args=[django_model.typ, row_type])
 
 
 def gather_kwargs(ctx: MethodContext) -> dict[str, MypyType] | None:
@@ -219,7 +172,7 @@ def gather_kwargs(ctx: MethodContext) -> dict[str, MypyType] | None:
             continue
         if any(kind not in named for kind in ctx.arg_kinds[i]):
             # Only named arguments supported
-            return None
+            continue
         for j in range(len(ctx.arg_names[i])):
             name = ctx.arg_names[i][j]
             assert name is not None
@@ -227,65 +180,66 @@ def gather_kwargs(ctx: MethodContext) -> dict[str, MypyType] | None:
     return kwargs
 
 
+def gather_expression_types(ctx: MethodContext) -> dict[str, MypyType] | None:
+    kwargs = gather_kwargs(ctx)
+    if not kwargs:
+        return None
+
+    # For now, we don't try to resolve the output_field of the field would be, but use Any.
+    # NOTE: It's important that we use 'special_form' for 'Any' as otherwise we can
+    # get stuck with mypy interpreting an overload ambiguity towards the
+    # overloaded 'Field.__get__' method when its 'model' argument gets matched. This
+    # is because the model argument gets matched with a model subclass that is
+    # parametrized with a type that contains the 'Any' below and then mypy runs in
+    # to a (false?) ambiguity, due to 'Any', and can't decide what overload/return
+    # type to select
+    #
+    # Example:
+    #   class MyModel(models.Model):
+    #       field = models.CharField()
+    #
+    #   # Our plugin auto generates the following subclass
+    #   class MyModel_WithAnnotations(MyModel, django_stubs_ext.Annotations[_Annotations]):
+    #       ...
+    #   # Assume
+    #   x = MyModel.objects.annotate(foo=F("id")).get()
+    #   reveal_type(x)  # MyModel_WithAnnotations[TypedDict({"foo": Any})]
+    #   # Then, on an attribute access of 'field' like
+    #   reveal_type(x.field)
+    #
+    # Now 'CharField.__get__', which is overloaded, is passed 'x' as the 'model'
+    # argument and mypy consider it ambiguous to decide which overload method to
+    # select due to the 'Any' in 'TypedDict({"foo": Any})'. But if we specify the
+    # 'Any' as 'TypeOfAny.special_form' mypy doesn't consider the model instance to
+    # contain 'Any' and the ambiguity goes away.
+    return {name: AnyType(TypeOfAny.special_form) for name, _ in kwargs.items()}
+
+
 def extract_proper_type_queryset_annotate(ctx: MethodContext, django_context: DjangoContext) -> MypyType:
-    # called on the Instance, returns QuerySet of something
-    if not isinstance(ctx.type, Instance):
-        return ctx.default_return_type
+    django_model = helpers.get_model_info_from_qs_ctx(ctx, django_context)
+    if django_model is None:
+        return AnyType(TypeOfAny.from_omitted_generics)
+
     default_return_type = get_proper_type(ctx.default_return_type)
     if not isinstance(default_return_type, Instance):
         return ctx.default_return_type
 
-    model_type = _extract_model_type_from_queryset(ctx.type, helpers.get_typechecker_api(ctx))
-    if model_type is None:
-        return AnyType(TypeOfAny.from_omitted_generics)
-
     api = helpers.get_typechecker_api(ctx)
-
-    field_types: dict[str, MypyType] | None = None
-    kwargs = gather_kwargs(ctx)
-    if kwargs:
-        # For now, we don't try to resolve the output_field of the field would be, but use Any.
-        # NOTE: It's important that we use 'special_form' for 'Any' as otherwise we can
-        # get stuck with mypy interpreting an overload ambiguity towards the
-        # overloaded 'Field.__get__' method when its 'model' argument gets matched. This
-        # is because the model argument gets matched with a model subclass that is
-        # parametrized with a type that contains the 'Any' below and then mypy runs in
-        # to a (false?) ambiguity, due to 'Any', and can't decide what overload/return
-        # type to select
-        #
-        # Example:
-        #   class MyModel(models.Model):
-        #       field = models.CharField()
-        #
-        #   # Our plugin auto generates the following subclass
-        #   class MyModel_WithAnnotations(MyModel, django_stubs_ext.Annotations[_Annotations]):
-        #       ...
-        #   # Assume
-        #   x = MyModel.objects.annotate(foo=F("id")).get()
-        #   reveal_type(x)  # MyModel_WithAnnotations[TypedDict({"foo": Any})]
-        #   # Then, on an attribute access of 'field' like
-        #   reveal_type(x.field)
-        #
-        # Now 'CharField.__get__', which is overloaded, is passed 'x' as the 'model'
-        # argument and mypy consider it ambiguous to decide which overload method to
-        # select due to the 'Any' in 'TypedDict({"foo": Any})'. But if we specify the
-        # 'Any' as 'TypeOfAny.special_form' mypy doesn't consider the model instance to
-        # contain 'Any' and the ambiguity goes away.
-        field_types = {name: AnyType(TypeOfAny.special_form) for name, _ in kwargs.items()}
+    expression_types = gather_expression_types(ctx)
 
     fields_dict = None
-    if field_types is not None:
+    if expression_types is not None:
         fields_dict = helpers.make_typeddict(
             api,
-            fields=field_types,
-            required_keys=set(field_types.keys()),
+            fields=expression_types,
+            required_keys=set(expression_types.keys()),
             readonly_keys=set(),
         )
 
     if fields_dict is not None:
-        annotated_type = get_annotated_type(api, model_type, fields_dict=fields_dict)
+        annotated_type = get_annotated_type(api, django_model.typ, fields_dict=fields_dict)
     else:
-        annotated_type = model_type
+        annotated_type = django_model.typ
 
     row_type: MypyType
     if len(default_return_type.args) > 1:
@@ -307,7 +261,7 @@ def extract_proper_type_queryset_annotate(ctx: MethodContext, django_context: Dj
             row_type = annotated_type
     else:
         row_type = annotated_type
-    return helpers.reparametrize_instance(default_return_type, [annotated_type, row_type])
+    return default_return_type.copy_modified(args=[annotated_type, row_type])
 
 
 def resolve_field_lookups(lookup_exprs: Sequence[Expression], django_context: DjangoContext) -> list[str] | None:
@@ -321,38 +275,123 @@ def resolve_field_lookups(lookup_exprs: Sequence[Expression], django_context: Dj
 
 
 def extract_proper_type_queryset_values(ctx: MethodContext, django_context: DjangoContext) -> MypyType:
-    # called on QuerySet, return QuerySet of something
-    if not isinstance(ctx.type, Instance):
+    """
+    Extract proper return type for QuerySet.values(*fields, **expressions) method calls.
+
+    See https://docs.djangoproject.com/en/5.2/ref/models/querysets/#values
+    """
+    django_model = helpers.get_model_info_from_qs_ctx(ctx, django_context)
+    if django_model is None or django_model.is_annotated:
         return ctx.default_return_type
+
     default_return_type = get_proper_type(ctx.default_return_type)
     if not isinstance(default_return_type, Instance):
         return ctx.default_return_type
-
-    model_type = _extract_model_type_from_queryset(ctx.type, helpers.get_typechecker_api(ctx))
-    if model_type is None:
-        return AnyType(TypeOfAny.from_omitted_generics)
-
-    model_cls = django_context.get_model_class_by_fullname(model_type.type.fullname)
-    if model_cls is None:
-        return default_return_type
 
     field_lookups = resolve_field_lookups(ctx.args[0], django_context)
     if field_lookups is None:
         return AnyType(TypeOfAny.from_error)
 
-    if len(field_lookups) == 0:
-        for field in django_context.get_model_fields(model_cls):
+    # Bare `.values()` case
+    if len(field_lookups) == 0 and not ctx.args[1]:
+        for field in django_context.get_model_fields(django_model.cls):
             field_lookups.append(field.attname)
 
-    column_types: OrderedDict[str, MypyType] = OrderedDict()
+    column_types: dict[str, MypyType] = {}
+
+    # Collect `*fields` types -- `.values("id", "name")`
     for field_lookup in field_lookups:
         field_lookup_type = get_field_type_from_lookup(
-            ctx, django_context, model_cls, lookup=field_lookup, method="values"
+            ctx, django_context, django_model.cls, lookup=field_lookup, method="values"
         )
         if field_lookup_type is None:
-            return helpers.reparametrize_instance(default_return_type, [model_type, AnyType(TypeOfAny.from_error)])
+            return default_return_type.copy_modified(args=[django_model.typ, AnyType(TypeOfAny.from_error)])
 
         column_types[field_lookup] = field_lookup_type
 
+    # Collect `**expressions` types -- `.values(lower_name=Lower("name"), foo=F("name"))`
+    expression_types = gather_expression_types(ctx)
+    if expression_types is not None:
+        column_types.update(expression_types)
+
     row_type = helpers.make_typeddict(ctx.api, column_types, set(column_types.keys()), set())
-    return helpers.reparametrize_instance(default_return_type, [model_type, row_type])
+    return default_return_type.copy_modified(args=[django_model.typ, row_type])
+
+
+def _infer_prefetch_element_model_type(queryset_expr: Expression | None, api: TypeChecker) -> Instance | None:
+    """Infer the model Instance from `Prefetch(queryset=...)`"""
+    if queryset_expr is None:
+        # TODO: Infer the model type from the lookup in `Prefetch(lookup=..., to_attr=...)`
+        return None
+    try:
+        qs_type = get_proper_type(api.expr_checker.accept(queryset_expr))
+    except Exception:
+        return None
+    if isinstance(qs_type, Instance):
+        return helpers.extract_model_type_from_queryset(qs_type, api)
+    return None
+
+
+def extract_prefetch_related_annotations(ctx: MethodContext, django_context: DjangoContext) -> MypyType:
+    """
+    Extract annotated attributes via `prefetch_related(Prefetch(..., to_attr=...))`
+
+    See https://docs.djangoproject.com/en/5.2/ref/models/querysets/#prefetch-objects
+    """
+    if not (
+        isinstance(ctx.type, Instance)
+        and isinstance((default_return_type := get_proper_type(ctx.default_return_type)), Instance)
+        and (api := helpers.get_typechecker_api(ctx))
+        and (model_type := helpers.extract_model_type_from_queryset(ctx.type, api)) is not None
+        and ctx.args
+        and ctx.arg_types
+        and ctx.arg_types[0]
+    ):
+        return ctx.default_return_type
+
+    fields: dict[str, MypyType] = {}
+
+    for expr, typ in zip(ctx.args[0], ctx.arg_types[0], strict=False):
+        typ = get_proper_type(typ)
+        if not (
+            isinstance(typ, Instance)
+            and typ.type.fullname == fullnames.PREFETCH_CLASS_FULLNAME
+            and isinstance(expr, CallExpr)
+            and (to_attr_expr := helpers.get_class_init_argument_by_name(expr, "to_attr"))
+            and (to_attr_value := helpers.resolve_string_attribute_value(to_attr_expr, django_context))
+        ):
+            continue
+
+        # Determine model type from the `queryset` attr
+        queryset_expr = helpers.get_class_init_argument_by_name(expr, "queryset")
+        elem_model = _infer_prefetch_element_model_type(queryset_expr, api)
+        value_type = api.named_generic_type(
+            "builtins.list",
+            [elem_model if elem_model is not None else AnyType(TypeOfAny.special_form)],
+        )
+
+        fields[to_attr_value] = value_type
+
+    if not fields:
+        return ctx.default_return_type
+
+    fields_dict = helpers.make_typeddict(
+        api,
+        fields=fields,
+        required_keys=set(fields.keys()),
+        readonly_keys=set(),
+    )
+
+    annotated_model = get_annotated_type(api, model_type, fields_dict=fields_dict)
+
+    # Keep row shape; if row is a model instance, update it to annotated
+    # Todo: consolidate with `extract_proper_type_queryset_annotate` row handling above.
+    if len(default_return_type.args) > 1:
+        original_row = get_proper_type(default_return_type.args[1])
+        row_type: MypyType = original_row
+        if isinstance(original_row, Instance) and helpers.is_model_type(original_row.type):
+            row_type = annotated_model
+    else:
+        row_type = annotated_model
+
+    return default_return_type.copy_modified(args=[annotated_model, row_type])

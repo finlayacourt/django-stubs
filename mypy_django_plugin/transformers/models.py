@@ -14,7 +14,6 @@ from mypy.nodes import (
     AssignmentStmt,
     CallExpr,
     Context,
-    Expression,
     FakeInfo,
     NameExpr,
     RefExpr,
@@ -908,22 +907,9 @@ class ProcessManyToManyFields(ModelClassInitializer):
         Inspect a 'ManyToManyField(...)' call to collect argument data on any 'to' and
         'through' arguments.
         """
-        look_for: dict[str, Expression | None] = {"to": None, "through": None}
-        # Look for 'to', being declared as the first positional argument
-        if call.arg_kinds[0].is_positional():
-            look_for["to"] = call.args[0]
-        # Look for 'through', being declared as the sixth positional argument.
-        if len(call.args) > 5 and call.arg_kinds[5].is_positional():
-            look_for["through"] = call.args[5]
-
-        # Sort out if any of the expected arguments was provided as keyword arguments
-        for arg_expr, _arg_kind, arg_name in zip(call.args, call.arg_kinds, call.arg_names, strict=False):
-            if arg_name in look_for and look_for[arg_name] is None:
-                look_for[arg_name] = arg_expr
-
-        # 'to' is a required argument of 'ManyToManyField()', we can't do anything if it's not provided
-        to_arg = look_for["to"]
+        to_arg = helpers.get_class_init_argument_by_name(call, "to")
         if to_arg is None:
+            # 'to' is a required argument of 'ManyToManyField()', we can't do anything if it's not provided
             return None
 
         # Resolve the type of the 'to' argument expression
@@ -939,7 +925,7 @@ class ProcessManyToManyFields(ModelClassInitializer):
         )
 
         # Resolve the type of the 'through' argument expression
-        through_arg = look_for["through"]
+        through_arg = helpers.get_class_init_argument_by_name(call, "through")
         through = None
         if through_arg is not None:
             through_model = helpers.get_model_from_expression(
@@ -991,7 +977,6 @@ class ProcessManyToManyFields(ModelClassInitializer):
         helpers.set_many_to_many_manager_info(
             to=model.type, derived_from="_default_manager", manager_info=related_manager_info
         )
-        helpers.set_manager_to_model(related_manager_info, model.type)
 
 
 class MetaclassAdjustments(ModelClassInitializer):
@@ -1006,21 +991,10 @@ class MetaclassAdjustments(ModelClassInitializer):
         if ctx.cls.fullname != fullnames.MODEL_CLASS_FULLNAME:
             return
 
-        does_not_exist = ctx.cls.info.names.get("DoesNotExist")
-        if does_not_exist is not None and isinstance(does_not_exist.node, Var) and not does_not_exist.plugin_generated:
-            del ctx.cls.info.names["DoesNotExist"]
-
-        multiple_objects_returned = ctx.cls.info.names.get("MultipleObjectsReturned")
-        if (
-            multiple_objects_returned is not None
-            and isinstance(multiple_objects_returned.node, Var)
-            and not multiple_objects_returned.plugin_generated
-        ):
-            del ctx.cls.info.names["MultipleObjectsReturned"]
-
-        objects = ctx.cls.info.names.get("objects")
-        if objects is not None and isinstance(objects.node, Var) and not objects.plugin_generated:
-            del ctx.cls.info.names["objects"]
+        for attr_name in ["DoesNotExist", "MultipleObjectsReturned", "objects"]:
+            attr = ctx.cls.info.names.get(attr_name)
+            if attr is not None and isinstance(attr.node, Var) and not attr.plugin_generated:
+                del ctx.cls.info.names[attr_name]
 
         return
 

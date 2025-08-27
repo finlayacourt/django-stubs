@@ -7,6 +7,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  UV_FROZEN: true # https://docs.astral.sh/uv/configuration/environment/#uv_frozen
+  UV_NO_SYNC: true # prevent `uv run` cmd from bringing very dev dependencies
+
 permissions:
   contents: read
 
@@ -23,25 +27,27 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13']
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
-        run: |
-          pip install -U pip "setuptools<79.0.0" wheel
-          SETUPTOOLS_ENABLE_FEATURES=legacy-editable pip install -r ./requirements.txt
+        run: uv sync --no-dev --group tests
 
       - name: Run mypy on plugin code
-        run: mypy --strict mypy_django_plugin
-
+        run: uv run mypy --strict mypy_django_plugin
       - name: Run mypy on ext code
-        run: mypy --strict ext
+        run: uv run mypy --strict ext
       - name: Run mypy on scripts and utils
-        run: mypy --strict scripts
+        run: uv run mypy --strict scripts
       - name: Run mypy on stubs
-        run: mypy --cache-dir=/dev/null --no-incremental django-stubs
+        run: uv run mypy --cache-dir=/dev/null --no-incremental django-stubs
+      - name: Run mypy on the test cases
+        run: uv run mypy --strict tests
 
   test:
     timeout-minutes: 15
@@ -52,25 +58,25 @@ jobs:
         shard: [0, 1, 2, 3]
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Setup system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install binutils libproj-dev gdal-bin
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
-        run: |
-          pip install -U pip "setuptools<79.0.0" wheel
-          SETUPTOOLS_ENABLE_FEATURES=legacy-editable pip install -r ./requirements.txt
+        run: uv sync --no-dev --group tests
 
       # Must match `shard` definition in the test matrix:
       - name: Run pytest tests
-        run: PYTHONPATH='.' pytest --num-shards=4 --shard-id=${{ matrix.shard }} -n auto tests
-      - name: Run mypy on the test cases
-        run: mypy --strict tests
+        run: uv run pytest --num-shards=4 --shard-id=${{ matrix.shard }} -n auto tests
+
 
   stubtest:
     timeout-minutes: 10
@@ -80,22 +86,23 @@ jobs:
         python-version: ['3.12', '3.13']
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Setup system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install binutils libproj-dev gdal-bin
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
-        run: |
-          pip install -U pip "setuptools<79.0.0" wheel
-          SETUPTOOLS_ENABLE_FEATURES=legacy-editable pip install -r ./requirements.txt
+        run: uv sync --no-dev --group tests
 
       - name: Run stubtest
-        run: ./scripts/stubtest.sh
+        run: uv run ./scripts/stubtest.sh
 
   run-pyright:
     timeout-minutes: 10
@@ -105,15 +112,21 @@ jobs:
         python-version: ['3.12']  # TODO: enable on other versions
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
-        run: |
-          pip install -U pip "setuptools<79.0.0" wheel
-          SETUPTOOLS_ENABLE_FEATURES=legacy-editable pip install -r ./requirements.txt
+        run: uv sync --no-dev --group pyright
+
+      # See https://github.com/jakebailey/pyright-action#providing-a-pyright-version-sourced-from-preexisting-dependencies
+      - name: Add venv to path
+        run: echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
       - name: Run pyright on the stubs
         uses: jakebailey/pyright-action@v2
         with:
@@ -135,29 +148,28 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13']
         django-version: ['5.0', '5.1', '5.2']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Setup system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install binutils libproj-dev gdal-bin
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
-        run: |
-          pip install -U pip "setuptools<79.0.0" wheel
-          SETUPTOOLS_ENABLE_FEATURES=legacy-editable pip install -r ./requirements.txt
-          pip install "Django==${{ matrix.django-version }}"
-          pip check
+        run: uv sync --no-dev --group tests
 
       - name: Run django-stubs-ext tests
-        run: PYTHONPATH='.' pytest ext
+        run: uv run --with "django==${{ matrix.django-version }}" pytest ext
 
   build-and-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-tags: true
       - uses: actions/setup-python@v5
@@ -167,8 +179,8 @@ jobs:
         run: python3 -m pip install --upgrade build twine
       - name: Build
         run: |
-          python3 -m build --sdist --wheel .
-          python3 -m build --sdist --wheel ext/
+          python3 -m build .
+          python3 -m build ext/
       - name: Check package metadata
         run: |
           twine check --strict dist/*

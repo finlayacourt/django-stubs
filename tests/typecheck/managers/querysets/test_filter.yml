@@ -33,7 +33,7 @@
 -   case: filter_with_invalid_type
     main: |
         from myapp.models import User
-        User.objects.filter(age=User())  # E: Incompatible type for lookup 'age': (got "User", expected "Union[str, int]")  [misc]
+        User.objects.filter(age=User())  # E: Incompatible type for lookup 'age': (got "User", expected "str | int")  [misc]
     installed_apps:
         - myapp
     files:
@@ -53,8 +53,8 @@
     installed_apps:
         - myapp
     out: |
-        main:2: error: Incompatible type for lookup 'age': (got "User", expected "Union[str, int]")  [misc]
-        main:2: error: Incompatible type for lookup 'gender': (got "User", expected "Union[str, int]")  [misc]
+        main:2: error: Incompatible type for lookup 'age': (got "User", expected "str | int")  [misc]
+        main:2: error: Incompatible type for lookup 'gender': (got "User", expected "str | int")  [misc]
     files:
         -   path: myapp/__init__.py
         -   path: myapp/models.py
@@ -89,7 +89,7 @@
         User.objects.filter(username__icontains=1)  # E: Incompatible type for lookup 'username__icontains': (got "int", expected "str")  [misc]
         User.objects.filter(username__isnull=1)  # E: Incompatible type for lookup 'username__isnull': (got "int", expected "bool")  [misc]
 
-        User.objects.filter(created_at=User())  # E: Incompatible type for lookup 'created_at': (got "User", expected "Union[str, datetime]")  [misc]
+        User.objects.filter(created_at=User())  # E: Incompatible type for lookup 'created_at': (got "User", expected "str | datetime")  [misc]
     installed_apps:
         - myapp
     files:
@@ -127,8 +127,8 @@
         Blog.objects.filter(publisher_id=1)
         Blog.objects.filter(publisher__id=1)
 
-        Blog.objects.filter(publisher=blog)  # E: Incompatible type for lookup 'publisher': (got "Blog", expected "Union[Publisher, int, None]")  [misc]
-        Blog.objects.filter(publisher_id=blog)  # E: Incompatible type for lookup 'publisher_id': (got "Blog", expected "Union[str, int]")  [misc]
+        Blog.objects.filter(publisher=blog)  # E: Incompatible type for lookup 'publisher': (got "Blog", expected "Publisher | int | None")  [misc]
+        Blog.objects.filter(publisher_id=blog)  # E: Incompatible type for lookup 'publisher_id': (got "Blog", expected "str | int")  [misc]
     installed_apps:
         - myapp
     files:
@@ -150,8 +150,8 @@
         Publisher.objects.filter(blogs=Blog())
         Publisher.objects.filter(blogs__id=1)
 
-        Publisher.objects.filter(blogs=publisher)  # E: Incompatible type for lookup 'blogs': (got "Publisher", expected "Union[Blog, int, None]")  [misc]
-        Publisher.objects.filter(blogs__id=publisher)  # E: Incompatible type for lookup 'blogs__id': (got "Publisher", expected "Union[str, int]")  [misc]
+        Publisher.objects.filter(blogs=publisher)  # E: Incompatible type for lookup 'blogs': (got "Publisher", expected "Blog | int | None")  [misc]
+        Publisher.objects.filter(blogs__id=publisher)  # E: Incompatible type for lookup 'blogs__id': (got "Publisher", expected "str | int")  [misc]
     installed_apps:
         - myapp
     files:
@@ -172,12 +172,12 @@
         author = Author()
 
         Book.objects.filter(authors=author)
-        Book.objects.filter(authors=book)  # E: Incompatible type for lookup 'authors': (got "Book", expected "Union[Author, int, None]")  [misc]
-        Book.objects.filter(authors='hello')  # E: Incompatible type for lookup 'authors': (got "str", expected "Union[Author, int, None]")  [misc]
+        Book.objects.filter(authors=book)  # E: Incompatible type for lookup 'authors': (got "Book", expected "Author | int | None")  [misc]
+        Book.objects.filter(authors='hello')  # E: Incompatible type for lookup 'authors': (got "str", expected "Author | int | None")  [misc]
 
         Author.objects.filter(books=book)
-        Author.objects.filter(books=author)  # E: Incompatible type for lookup 'books': (got "Author", expected "Union[Book, int, None]")  [misc]
-        Author.objects.filter(books='hello')  # E: Incompatible type for lookup 'books': (got "str", expected "Union[Book, int, None]")  [misc]
+        Author.objects.filter(books=author)  # E: Incompatible type for lookup 'books': (got "Author", expected "Book | int | None")  [misc]
+        Author.objects.filter(books='hello')  # E: Incompatible type for lookup 'books': (got "str", expected "Book | int | None")  [misc]
     installed_apps:
         - myapp
     files:
@@ -197,11 +197,11 @@
         user = User()
         profile = Profile()
         User.objects.filter(profile=profile)
-        User.objects.filter(profile=user)  # E: Incompatible type for lookup 'profile': (got "User", expected "Union[Profile, int, None]")  [misc]
-        User.objects.filter(profile='hello')  # E: Incompatible type for lookup 'profile': (got "str", expected "Union[Profile, int, None]")  [misc]
+        User.objects.filter(profile=user)  # E: Incompatible type for lookup 'profile': (got "User", expected "Profile | int | None")  [misc]
+        User.objects.filter(profile='hello')  # E: Incompatible type for lookup 'profile': (got "str", expected "Profile | int | None")  [misc]
         Profile.objects.filter(user=user)
-        Profile.objects.filter(user=profile)  # E: Incompatible type for lookup 'user': (got "Profile", expected "Union[User, int, None]")  [misc]
-        Profile.objects.filter(user='hello')  # E: Incompatible type for lookup 'user': (got "str", expected "Union[User, int, None]")  [misc]
+        Profile.objects.filter(user=profile)  # E: Incompatible type for lookup 'user': (got "Profile", expected "User | int | None")  [misc]
+        Profile.objects.filter(user='hello')  # E: Incompatible type for lookup 'user': (got "str", expected "User | int | None")  [misc]
     installed_apps:
         - myapp
     files:
@@ -254,3 +254,78 @@
                     username = models.TextField()
                     username2 = models.TextField()
                     age = models.IntegerField()
+
+
+- case: alias_and_annotate_can_be_used_with_dynamic_new_fields
+  main: |
+    from django.db import models
+    from myapp.models import Blog
+
+    Blog.objects.alias(alias_entries=models.Count("entry")).annotate(
+        annotate_entries=models.Count("entry"),
+    ).filter(alias_entries__gt=5, annotate_entries__gt=5)
+    Blog.objects.alias(alias_entries=models.Count("entry")).filter(alias_entries=5)
+    Blog.objects.alias(alias_entries=models.Count("entry")).filter(alias_entries__gt=5)
+    Blog.objects.alias(  # E: Cannot resolve keyword 'alias_e' into field. Choices are: entry, id, alias_entries  [misc]
+        alias_entries=models.Count("entry")
+    ).filter(
+        # Wrong name:
+        alias_e=5
+    )
+  installed_apps:
+    - myapp
+  files:
+    - path: myapp/__init__.py
+    - path: myapp/models.py
+      content: |
+        from django.db import models
+        class Blog(models.Model):
+            pass
+        class Entry(models.Model):
+            blog = models.ForeignKey(Blog, on_delete=models.CASCADE)
+
+# Regression test for #1172
+-   case: chained_filter_lookups
+    main: |
+        from myapp.models import Cheese
+
+        Cheese.objects.filter(field=True).filter(field2=True)
+        qs = Cheese.objects.all()
+        qs.filter(field=True)
+    out: |
+      main:3: error: Cannot resolve keyword 'field' into field. Choices are: a, id  [misc]
+      main:3: error: Cannot resolve keyword 'field2' into field. Choices are: a, id  [misc]
+      main:5: error: Cannot resolve keyword 'field' into field. Choices are: a, id  [misc]
+
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+
+                class Cheese(models.Model):
+                    a = models.BooleanField()
+
+-   case: lookups_from_custom_queryset
+    main: |
+        from myapp.models import MyModel
+        qs = MyModel.objects.all()
+
+        qs.filter(unknown_field=True)  # E: Cannot resolve keyword 'unknown_field' into field. Choices are: age, id  [misc]
+        qs.filter(age=MyModel()) # E: Incompatible type for lookup 'age': (got "MyModel", expected "str | int")  [misc]
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+
+                class MyQuerySet(models.QuerySet["MyModel"]):
+                    ...
+
+                class MyModel(models.Model):
+                    age = models.IntegerField()
+                    objects = MyQuerySet.as_manager()

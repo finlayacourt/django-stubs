@@ -2,7 +2,6 @@
 
 [![test](https://github.com/typeddjango/django-stubs/actions/workflows/test.yml/badge.svg?branch=master&event=push)](https://github.com/typeddjango/django-stubs/actions/workflows/test.yml)
 [![Checked with mypy](http://www.mypy-lang.org/static/mypy_badge.svg)](http://mypy-lang.org/)
-[![Gitter](https://badges.gitter.im/mypy-django/Lobby.svg)](https://gitter.im/mypy-django/Lobby)
 [![StackOverflow](https://shields.io/badge/ask-stackoverflow-orange?logo=stackoverflow)](https://stackoverflow.com/questions/tagged/django-stubs?tab=Active)
 
 This package contains [type stubs](https://www.python.org/dev/peps/pep-0561/) and a custom mypy plugin to provide more precise static types and type inference for Django framework. Django uses some Python "magic" that makes having precise types for some code patterns problematic. This is why we need this project. The final goal is to be able to get precise types for most common patterns.
@@ -49,7 +48,9 @@ We rely on different `django` and `mypy` versions:
 
 | django-stubs   | Mypy version | Django version | Django partial support | Python version |
 |----------------|--------------|----------------|------------------------|----------------|
-| 5.2.0          | 1.13+        | 5.2            | 5.1                    | 3.10 - 3.13    |
+| 5.2.2          | 1.13 - 1.17  | 5.2            | 5.1, 5.0               | 3.10 - 3.13    |
+| 5.2.1          | 1.13 - 1.16  | 5.2            | 5.1, 5.0               | 3.10 - 3.13    |
+| 5.2.0          | 1.13+        | 5.2            | 5.1, 5.0               | 3.10 - 3.13    |
 | 5.1.3          | 1.13+        | 5.1            | 4.2                    | 3.9 - 3.13     |
 | 5.1.2          | 1.13+        | 5.1            | 4.2                    | 3.9 - 3.13     |
 | 5.1.1          | 1.13.x       | 5.1            | 4.2                    | 3.8 - 3.12     |
@@ -165,8 +166,22 @@ This happens because these Django classes do not support [`__class_getitem__`](h
    You can add extra types to patch with `django_stubs_ext.monkeypatch(extra_classes=[YourDesiredType])`
 
    **If you use generic symbols in `django.contrib.auth.forms`**, you will have to do the monkeypatching
-   again in your first [`AppConfig.ready`](https://docs.djangoproject.com/en/5.2/ref/applications/#django.apps.AppConfig.ready).
+   manually in your first [`AppConfig.ready`](https://docs.djangoproject.com/en/5.2/ref/applications/#django.apps.AppConfig.ready).
    This is currently required because `django.contrib.auth.forms` cannot be imported until django is initialized.
+
+    ```python
+    import django_stubs_ext
+    from django.apps import AppConfig
+
+    class ClientsConfig(AppConfig):
+        name = "clients"
+
+        def ready(self) -> None:
+            from django.contrib.auth.forms import SetPasswordMixin, SetUnusablePasswordMixin
+
+            # For Django version prior to 5.1, use `extra_classes=[SetPasswordForm, AdminPasswordChangeForm]` instead.
+            django_stubs_ext.monkeypatch(extra_classes=[SetPasswordMixin, SetUnusablePasswordMixin])
+    ```
 
 
 2. You can use strings instead: `'QuerySet[MyModel]'` and `'Manager[MyModel]'`, this way it will work as a type for `mypy` and as a regular `str` in runtime.
@@ -406,11 +421,6 @@ See mypy section on [generic classes subclasses](https://mypy.readthedocs.io/en/
 - [`djangorestframework-stubs`](https://github.com/typeddjango/djangorestframework-stubs) - Stubs for Django REST Framework.
 - [`pytest-mypy-plugins`](https://github.com/typeddjango/pytest-mypy-plugins) - `pytest` plugin that we use for testing `mypy` stubs and plugins.
 - [`wemake-django-template`](https://github.com/wemake-services/wemake-django-template) - Create new typed Django projects in seconds.
-
-## To get help
-
-We have Gitter here: <https://gitter.im/mypy-django/Lobby>
-If you think you have more generic typing issue, please refer to <https://github.com/python/mypy> and their Gitter.
 
 ## Contributing
 

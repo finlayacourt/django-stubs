@@ -15,10 +15,14 @@
 -   case: get_field_returns_proper_field_type
     main: |
         from myapp.models import MyUser
-        reveal_type(MyUser._meta.get_field('base_name'))  # N: Revealed type is "django.db.models.fields.CharField[Any, Any]"
-        reveal_type(MyUser._meta.get_field('name'))  # N: Revealed type is "django.db.models.fields.CharField[Any, Any]"
-        reveal_type(MyUser._meta.get_field('age'))  # N: Revealed type is "django.db.models.fields.IntegerField[Any, Any]"
-        reveal_type(MyUser._meta.get_field('to_user'))  # N: Revealed type is "django.db.models.fields.related.ForeignKey[Any, Any]"
+        reveal_type(MyUser._meta.get_field('base_name'))  # N: Revealed type is "django.db.models.fields.CharField[builtins.str | builtins.int | django.db.models.expressions.Combinable, builtins.str]"
+        reveal_type(MyUser.base_name.field)  # N: Revealed type is "django.db.models.fields.CharField[builtins.str | builtins.int | django.db.models.expressions.Combinable, builtins.str]"
+        reveal_type(MyUser._meta.get_field('name'))  # N: Revealed type is "django.db.models.fields.CharField[builtins.str | builtins.int | django.db.models.expressions.Combinable, builtins.str]"
+        reveal_type(MyUser.name.field)  # N: Revealed type is "django.db.models.fields.CharField[builtins.str | builtins.int | django.db.models.expressions.Combinable, builtins.str]"
+        reveal_type(MyUser._meta.get_field('age'))  # N: Revealed type is "django.db.models.fields.IntegerField[builtins.float | builtins.int | builtins.str | django.db.models.expressions.Combinable, builtins.int]"
+        reveal_type(MyUser.age.field)  # N: Revealed type is "django.db.models.fields.IntegerField[builtins.float | builtins.int | builtins.str | django.db.models.expressions.Combinable, builtins.int]"
+        reveal_type(MyUser._meta.get_field('to_user'))  # N: Revealed type is "django.db.models.fields.related.ForeignKey[myapp.models.MyUser | django.db.models.expressions.Combinable, myapp.models.MyUser]"
+        reveal_type(MyUser.to_user.field)  # N: Revealed type is "django.db.models.fields.related.ForeignKey[myapp.models.MyUser | django.db.models.expressions.Combinable, myapp.models.MyUser]"
 
         MyUser._meta.get_field('unknown')  # E: MyUser has no field named 'unknown'  [misc]
     installed_apps:
@@ -40,7 +44,11 @@
         from myapp.models import AbstractModel
         class MyModel(AbstractModel):
             pass
-        reveal_type(MyModel._meta.get_field('field'))  # N: Revealed type is "Union[django.db.models.fields.Field[Any, Any], django.db.models.fields.reverse_related.ForeignObjectRel, django.contrib.contenttypes.fields.GenericForeignKey]"
+
+        MyModel._meta.get_field('field')  # E: MyModel has no field named 'field'  [misc]
+
+        field: str
+        reveal_type(MyModel._meta.get_field(field))  # N: Revealed type is "django.db.models.fields.Field[Any, Any] | django.db.models.fields.reverse_related.ForeignObjectRel | django.contrib.contenttypes.fields.GenericForeignKey"
     installed_apps:
         - myapp
     files:
@@ -53,8 +61,7 @@
                 class AbstractModel(models.Model):
                     class Meta(TypedModelMeta):
                         abstract = True
-                class MyModel(AbstractModel):
-                    field = ArrayField(models.IntegerField(), default=[])
+
 -   case: base_model_meta_incompatible_types
     main: |
         from django.db import models
@@ -65,8 +72,8 @@
             example = models.CharField(max_length=100)
             class Meta(TypedModelMeta):
                 abstract = 7  # E: Incompatible types in assignment (expression has type "int", base class "TypedModelMeta" defined the type as "bool")  [assignment]
-                verbose_name = ['test']  # E: Incompatible types in assignment (expression has type "List[str]", base class "TypedModelMeta" defined the type as "Union[str, _StrPromise]")  [assignment]
-                unique_together = {1: 2}  # E: Incompatible types in assignment (expression has type "Dict[int, int]", base class "TypedModelMeta" defined the type as "Union[Sequence[Sequence[str]], Sequence[str]]")  [assignment]
+                verbose_name = ['test']  # E: Incompatible types in assignment (expression has type "list[str]", base class "TypedModelMeta" defined the type as "str | _StrPromise")  [assignment]
+                unique_together = {1: 2}  # E: Incompatible types in assignment (expression has type "dict[int, int]", base class "TypedModelMeta" defined the type as "Sequence[Sequence[str]]")  [assignment]
                 unknown_attr = True  # can't check this
 
 
@@ -81,7 +88,7 @@
 
         # Errors:
         AbstractModel()  # E: Cannot instantiate abstract class "AbstractModel" with abstract attributes "DoesNotExist" and "MultipleObjectsReturned"  [abstract]
-        AbstractModel.objects.create()  # E: "Type[AbstractModel]" has no attribute "objects"  [attr-defined]
+        AbstractModel.objects.create()  # E: "type[AbstractModel]" has no attribute "objects"  [attr-defined]
     installed_apps:
         - myapp
     files:
@@ -90,8 +97,10 @@
             content: |
                 from django.db import models
                 class AbstractModel(models.Model):
+                    base = models.TextField()
+
                     class Meta:
                         abstract = True
-                    base = models.TextField()
+
                 class MyModel(AbstractModel):
                     field = models.IntegerField()

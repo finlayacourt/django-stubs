@@ -57,9 +57,6 @@ django.contrib.auth.hashers.Argon2PasswordHasher.params
 django.contrib.auth.hashers.ScryptPasswordHasher
 django.contrib.auth.hashers.must_update_salt
 django.contrib.auth.hashers.reset_hashers
-django.contrib.auth.management.commands.createsuperuser.Command.get_input_data
-django.contrib.auth.management.commands.createsuperuser.Command.username_is_unique
-django.contrib.auth.management.commands.createsuperuser.PASSWORD_FIELD
 django.contrib.auth.models.AbstractBaseUser.last_login
 django.contrib.auth.models.AbstractBaseUser.password
 django.contrib.auth.models.AbstractUser.date_joined
@@ -173,7 +170,6 @@ django.contrib.gis.db.models.DurationField.formfield
 django.contrib.gis.db.models.DurationField.get_db_converters
 django.contrib.gis.db.models.EmailField.formfield
 django.contrib.gis.db.models.Exists.empty_result_set_value
-django.contrib.gis.db.models.Expression.identity
 django.contrib.gis.db.models.ExpressionWrapper.allowed_default
 django.contrib.gis.db.models.Extent.is_extent
 django.contrib.gis.db.models.Extent3D.is_extent
@@ -244,7 +240,6 @@ django.contrib.gis.db.models.JSONField.get_transform
 django.contrib.gis.db.models.Lookup.get_prep_lhs
 django.contrib.gis.db.models.Lookup.allowed_default
 django.contrib.gis.db.models.Lookup.lookup_name
-django.contrib.gis.db.models.Lookup.output_field
 django.contrib.gis.db.models.ManyToManyField.__get__
 django.contrib.gis.db.models.ManyToManyField.formfield
 django.contrib.gis.db.models.ManyToManyField.path_infos
@@ -414,14 +409,7 @@ django.core.management.commands.makemessages.TranslatableFile.path
 django.core.servers.basehttp.ServerHandler.__init__
 django.core.servers.basehttp.ThreadedWSGIServer.__init__
 django.db.backends.ddl_references.Expressions
-django.db.backends.mysql.base.DatabaseWrapper.data_type_check_constraints
-django.db.backends.mysql.base.DatabaseWrapper.display_name
-django.db.backends.mysql.base.DatabaseWrapper.mysql_is_mariadb
-django.db.backends.mysql.base.DatabaseWrapper.mysql_server_data
-django.db.backends.mysql.base.DatabaseWrapper.mysql_server_info
-django.db.backends.mysql.base.DatabaseWrapper.mysql_version
 django.db.backends.mysql.base.DatabaseWrapper.ops
-django.db.backends.mysql.base.DatabaseWrapper.sql_mode
 django.db.backends.mysql.features.DatabaseFeatures.can_rename_index
 django.db.backends.mysql.features.DatabaseFeatures.can_return_rows_from_bulk_insert
 django.db.backends.mysql.features.DatabaseFeatures.django_test_skips
@@ -437,8 +425,10 @@ django.db.backends.mysql.introspection.InfoLine._fields
 django.db.backends.mysql.introspection.InfoLine.comment
 django.db.backends.mysql.introspection.TableInfo
 django.db.backends.mysql.schema.DatabaseSchemaEditor.sql_alter_column_comment
+django.db.backends.oracle.features.DatabaseFeatures.django_test_skips
 django.db.backends.oracle.features.DatabaseFeatures.introspected_field_types
 django.db.backends.oracle.features.DatabaseFeatures.supports_collation_on_charfield
+django.db.backends.oracle.features.DatabaseFeatures.supports_frame_exclusion
 django.db.backends.postgresql.base.DatabaseWrapper.Database
 django.db.backends.postgresql.base.DatabaseWrapper.ops
 django.db.backends.postgresql.base.DatabaseWrapper.tzinfo_factory
@@ -526,7 +516,6 @@ django.db.models.DurationField.formfield
 django.db.models.DurationField.get_db_converters
 django.db.models.EmailField.formfield
 django.db.models.Exists.empty_result_set_value
-django.db.models.Expression.identity
 django.db.models.ExpressionWrapper.allowed_default
 django.db.models.Field.__copy__
 django.db.models.Field.__deepcopy__
@@ -595,7 +584,6 @@ django.db.models.JSONField.get_transform
 django.db.models.Lookup.get_prep_lhs
 django.db.models.Lookup.lookup_name
 django.db.models.Lookup.allowed_default
-django.db.models.Lookup.output_field
 django.db.models.ManyToManyField.__get__
 django.db.models.ManyToManyField.formfield
 django.db.models.ManyToManyField.path_infos
@@ -669,7 +657,6 @@ django.db.models.expressions.Func.allowed_default
 django.db.models.expressions.When.allowed_default
 django.db.models.expressions.Col.relabeled_clone
 django.db.models.expressions.Exists.empty_result_set_value
-django.db.models.expressions.Expression.identity
 django.db.models.expressions.OrderBy.as_oracle
 django.db.models.expressions.OrderBy.as_sql
 django.db.models.expressions.Ref.relabeled_clone
@@ -870,7 +857,6 @@ django.db.models.lookups.IExact.process_rhs
 django.db.models.lookups.Lookup.get_prep_lhs
 django.db.models.lookups.Lookup.allowed_default
 django.db.models.lookups.Lookup.lookup_name
-django.db.models.lookups.Lookup.output_field
 django.db.models.lookups.PatternLookup.process_rhs
 django.db.models.query.EmptyQuerySet.__init__
 django.db.models.query.QuerySet.__deepcopy__
@@ -909,7 +895,6 @@ django.db.models.sql.where.WhereNode.get_group_by_cols
 django.db.models.sql.where.WhereNode.get_lookup
 django.db.models.sql.where.WhereNode.get_source_expressions
 django.db.models.sql.where.WhereNode.leaves
-django.db.models.sql.where.WhereNode.output_field
 django.db.models.sql.where.WhereNode.replace_expressions
 django.db.models.sql.where.WhereNode.set_source_expressions
 django.db.models.sql.where.WhereNode.split_having
