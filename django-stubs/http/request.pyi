@@ -3,6 +3,7 @@ from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Se
 from re import Pattern
 from typing import Any, BinaryIO, Literal, NoReturn, TypeAlias, TypeVar, overload, type_check_only
 
+import django_types
 from django.contrib.auth.models import _AnyUser, _User
 from django.contrib.sessions.backends.base import SessionBase
 from django.contrib.sites.models import Site
@@ -35,7 +36,8 @@ class HttpHeaders(CaseInsensitiveMapping[str]):
     @classmethod
     def to_asgi_names(cls, headers: Mapping[str, Any]) -> dict[str, Any]: ...
 
-class HttpRequest:
+@type_check_only
+class BaseHttpRequest:
     GET: _ImmutableQueryDict
     POST: _ImmutableQueryDict
     COOKIES: dict[str, str]
@@ -111,6 +113,8 @@ class HttpRequest:
     def readline(self, limit: int | None = -1, /) -> bytes: ...
     def __iter__(self) -> Iterator[bytes]: ...
     def readlines(self) -> list[bytes]: ...
+
+HttpRequest = django_types.HttpRequest
 
 @type_check_only
 class _MutableHttpRequest(HttpRequest):
