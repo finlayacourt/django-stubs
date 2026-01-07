@@ -2,7 +2,7 @@ import enum
 from typing import Any, Literal, TypeVar
 
 from django.db.models import Choices, IntegerChoices, Model, TextChoices
-from django.utils.functional import _StrOrPromise
+from django.utils.functional import _StrOrPromise, _StrPromise
 from django.utils.translation import gettext_lazy as _
 from typing_extensions import assert_type
 
@@ -135,23 +135,23 @@ class DeckModel(Model):
 
 # Assertions for an integer choices type that uses a lazy translatable string for all labels.
 assert_type(Suit.names, list[str])
-assert_type(Suit.labels, list[_StrOrPromise])
+assert_type(Suit.labels, list[_StrPromise])  # pyright: ignore[reportAssertTypeFailure]
 assert_type(Suit.values, list[int])
-assert_type(Suit.choices, list[tuple[int, _StrOrPromise]])
+assert_type(Suit.choices, list[tuple[int, _StrPromise]])  # pyright: ignore[reportAssertTypeFailure]
 assert_type(Suit.CLUB, Literal[Suit.CLUB])
 assert_type(Suit.CLUB.name, Literal["CLUB"])
-assert_type(Suit.CLUB.label, _StrOrPromise)
+assert_type(Suit.CLUB.label, _StrPromise)  # pyright: ignore[reportAssertTypeFailure]
 assert_type(Suit.CLUB.value, int)
 assert_type(Suit.CLUB.do_not_call_in_templates, Literal[True])
 
 # Assertions for a text choices type that uses a lazy translatable string for all labels.
 assert_type(YearInSchool.names, list[str])
-assert_type(YearInSchool.labels, list[_StrOrPromise])
+assert_type(YearInSchool.labels, list[_StrPromise])  # pyright: ignore[reportAssertTypeFailure]
 assert_type(YearInSchool.values, list[str])
-assert_type(YearInSchool.choices, list[tuple[str, _StrOrPromise]])
+assert_type(YearInSchool.choices, list[tuple[str, _StrPromise]])  # pyright: ignore[reportAssertTypeFailure]
 assert_type(YearInSchool.SENIOR, Literal[YearInSchool.SENIOR])
 assert_type(YearInSchool.SENIOR.name, Literal["SENIOR"])
-assert_type(YearInSchool.SENIOR.label, _StrOrPromise)
+assert_type(YearInSchool.SENIOR.label, _StrPromise)  # pyright: ignore[reportAssertTypeFailure]
 assert_type(YearInSchool.SENIOR.value, str)
 assert_type(YearInSchool.SENIOR.do_not_call_in_templates, Literal[True])
 
@@ -166,7 +166,7 @@ assert_type(Vehicle.CAR.name, Literal["CAR"])
 assert_type(Vehicle.CAR.label, _StrOrPromise)
 assert_type(Vehicle.CAR.value, int)
 assert_type(Vehicle.CAR.do_not_call_in_templates, Literal[True])
-assert_type(Vehicle.__empty__, _StrOrPromise)
+assert_type(Vehicle.__empty__, _StrPromise)  # pyright: ignore[reportAssertTypeFailure]
 
 # Assertions for an text choices type that defines `__empty__` and uses plain strings for all labels.
 # Note: Suppress errors from pyright as the mypy plugin handles making types optional.
@@ -227,12 +227,26 @@ assert_type(Constants.__empty__, str)  # pyright: ignore[reportAssertTypeFailure
 # Note: Suppress errors from pyright as the mypy plugin narrows the type of labels if non-lazy.
 assert_type(VoidChoices.names, list[str])
 assert_type(VoidChoices.labels, list[str])  # pyright: ignore[reportAssertTypeFailure]
-assert_type(VoidChoices.values, list[Any | None])  # pyright: ignore[reportAssertTypeFailure]
-assert_type(VoidChoices.choices, list[tuple[Any | None, str]])  # pyright: ignore[reportAssertTypeFailure]
+
+assert_type(VoidChoices.values, list[int | None])  # type: ignore[assert-type]  # pyright: ignore[reportAssertTypeFailure]
+assert_type(  # pyrefly: ignore[assert-type]
+    VoidChoices.values,  # pyright: ignore[reportAssertTypeFailure]
+    list[Any | None],
+)
+
+assert_type(VoidChoices.choices, list[tuple[int | None, str]])  # type: ignore[assert-type]  # pyright: ignore[reportAssertTypeFailure]
+assert_type(  # pyrefly: ignore[assert-type]
+    VoidChoices.choices,  # pyright: ignore[reportAssertTypeFailure]
+    list[tuple[Any | None, str]],
+)
+
 assert_type(VoidChoices.ABYSS, Literal[VoidChoices.ABYSS])
 assert_type(VoidChoices.ABYSS.name, Literal["ABYSS"])
 assert_type(VoidChoices.ABYSS.label, str)  # pyright: ignore[reportAssertTypeFailure]
-assert_type(VoidChoices.ABYSS.value, Any)
+
+assert_type(VoidChoices.ABYSS.value, int)  # type: ignore[assert-type]  # pyright: ignore[reportAssertTypeFailure]
+assert_type(VoidChoices.ABYSS.value, Any)  # pyrefly: ignore[assert-type]
+
 assert_type(VoidChoices.ABYSS.do_not_call_in_templates, Literal[True])
 assert_type(VoidChoices.__empty__, str)  # pyright: ignore[reportAssertTypeFailure]
 
@@ -274,7 +288,10 @@ assert_type([member.value for choices in x0 for member in choices], list[int])
 
 # Assertions for mixing multiple choices types with consistent base types - only `TextChoices`.
 x1 = (Medal, Gender)
-assert_type([member.label for choices in x1 for member in choices], list[_StrOrPromise])
+
+assert_type([member.label for choices in x1 for member in choices], list[str])  # type: ignore[assert-type]  # pyright: ignore[reportAssertTypeFailure]
+assert_type([member.label for choices in x1 for member in choices], list[_StrOrPromise])  # pyrefly: ignore[assert-type]
+
 assert_type([member.value for choices in x1 for member in choices], list[str])
 
 # Assertions for mixing multiple choices types with different base types - `IntegerChoices` and `TextChoices`.
@@ -284,11 +301,15 @@ assert_type([member.value for choices in x2 for member in choices], list[int | s
 
 # Assertions for mixing multiple choices types with consistent base types - custom types.
 x3 = (Constants, Separator)
-assert_type([member.label for choices in x3 for member in choices], list[_StrOrPromise])
-assert_type([member.value for choices in x3 for member in choices], list[Any])
+
+assert_type([member.label for choices in x3 for member in choices], list[str])  # type: ignore[assert-type]  # pyright: ignore[reportAssertTypeFailure]
+assert_type([member.label for choices in x3 for member in choices], list[_StrOrPromise])  # pyrefly: ignore[assert-type]
+
+assert_type([member.value for choices in x3 for member in choices], list[bytes | float])  # type: ignore[assert-type]  # pyright: ignore[reportAssertTypeFailure]
+assert_type([member.value for choices in x3 for member in choices], list[Any])  # pyrefly: ignore[assert-type]
 
 
 # Assertions for choices objects defined and aliased in a model.
-assert_type(DeckModel.Suit.choices, list[tuple[int, _StrOrPromise]])
-assert_type(DeckModel.House.choices, list[tuple[int, _StrOrPromise]])
+assert_type(DeckModel.Suit.choices, list[tuple[int, _StrPromise]])  # pyright: ignore[reportAssertTypeFailure]
+assert_type(DeckModel.House.choices, list[tuple[int, _StrPromise]])  # pyright: ignore[reportAssertTypeFailure]
 assert_type(DeckModel.Joker.choices, list[tuple[str, str]])  # pyright: ignore[reportAssertTypeFailure]

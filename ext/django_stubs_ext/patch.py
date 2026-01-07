@@ -7,6 +7,7 @@ from django import VERSION
 from django.contrib.admin import ModelAdmin
 from django.contrib.admin.options import BaseModelAdmin
 from django.contrib.messages.views import SuccessMessageMixin
+from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sitemaps import Sitemap
 from django.contrib.syndication.views import Feed
 from django.core.files.utils import FileProxyMixin
@@ -98,7 +99,19 @@ _need_generic: list[MPGeneric[Any]] = [
     MPGeneric(ForwardManyToOneDescriptor),
     MPGeneric(ReverseOneToOneDescriptor),
     MPGeneric(Prefetch),
+    MPGeneric(SessionStore),
 ]
+
+if VERSION >= (6, 0):
+    from django.tasks import Task, TaskContext, TaskResult
+
+    _need_generic.extend(
+        [
+            MPGeneric(Task),
+            MPGeneric(TaskContext),
+            MPGeneric(TaskResult),
+        ]
+    )
 
 
 def monkeypatch(extra_classes: Iterable[type] | None = None, include_builtins: bool = True) -> None:
