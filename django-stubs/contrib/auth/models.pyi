@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from typing import Any, ClassVar, Literal, TypeAlias, TypeVar
 
+import django_types
 from django.contrib.auth.base_user import AbstractBaseUser as AbstractBaseUser
 from django.contrib.auth.base_user import BaseUserManager as BaseUserManager
 from django.contrib.auth.validators import UnicodeUsernameValidator
@@ -15,7 +16,7 @@ from typing_extensions import Self
 # This is our "placeholder" type the mypy plugin refines to configured 'AUTH_USER_MODEL'
 # wherever it is used as a type. The most recognised example of this is (probably)
 # `HttpRequest.user`
-_User: TypeAlias = AbstractBaseUser
+_User: TypeAlias = django_types.User
 
 _UserModel: TypeAlias = type[_User]
 

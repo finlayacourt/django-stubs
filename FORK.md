@@ -1,5 +1,21 @@
 We maintain our own fork of `django-stubs`, since `django-types` has some problems and is slow to update 
 
+## Setup
+
+You must create a `django_types.pyi` file in the project root to define project specific types for `User` and `HttpRequest`. For example:
+
+```python
+from django.http.request import BaseHttpRequest
+
+from accounts.models import Account
+from htmx.middleware import HtmxDetails
+
+User = Account
+
+class HttpRequest(BaseHttpRequest):
+    htmx: HtmxDetails
+```
+
 ## Fields
 
 We replace the mypy plugin with default generics and overloads. This is similar to how `django-types` does it, but with much less code because of the `_NT` generic.
