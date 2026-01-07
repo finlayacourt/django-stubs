@@ -1,5 +1,6 @@
 -   case: queryset_basic_methods_return_type
     main: |
+        from typing_extensions import reveal_type
         from django.utils import timezone
         from myapp.models import Blog
 
@@ -18,10 +19,17 @@
         reveal_type(qs.none()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog, myapp.models.Blog]"
         reveal_type(qs.update_or_create()) # N: Revealed type is "tuple[myapp.models.Blog, builtins.bool]"
         reveal_type(qs.explain()) # N: Revealed type is "builtins.str"
-        reveal_type(qs.raw(qs.explain())) # N: Revealed type is "django.db.models.query.RawQuerySet[Any]"
+        reveal_type(qs.raw(qs.explain())) # N: Revealed type is "django.db.models.query.RawQuerySet[myapp.models.Blog]"
+        reveal_type(qs.distinct()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog, myapp.models.Blog]"
+        reveal_type(qs.distinct("created_at")) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog, myapp.models.Blog]"
         # .dates / .datetimes
         reveal_type(Blog.objects.dates("created_at", "day")) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog, datetime.date]"
         reveal_type(Blog.objects.datetimes("created_at", "day")) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog, datetime.datetime]"
+        # defer / only
+        reveal_type(qs.defer("created_at")) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog, myapp.models.Blog]"
+        reveal_type(qs.defer(None))  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog, myapp.models.Blog]"
+        reveal_type(qs.only("created_at")) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog, myapp.models.Blog]"
+        qs.only(None)  # E: Argument 1 to "only" of "QuerySet" has incompatible type "None"; expected "str"  [arg-type]
 
         # AND-ing QuerySets
         reveal_type(Blog.objects.all() & Blog.objects.all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog, myapp.models.Blog]"
@@ -46,6 +54,7 @@
 
 -   case: queryset_missing_method
     main: |
+        from typing_extensions import reveal_type
         from myapp.models import User
         reveal_type(User.objects)  # N: Revealed type is "django.db.models.manager.Manager[myapp.models.User]"
         User.objects.not_existing_method()  # E: "Manager[User]" has no attribute "not_existing_method"  [attr-defined]
@@ -61,12 +70,89 @@
 
 -   case: queryset_method_of_union
     main: |
+        from typing_extensions import TypedDict, reveal_type
+        from django.contrib.auth.models import User
+        from django.db import models
         from myapp.models import MyModel1, MyModel2
         kls: type[MyModel1 | MyModel2] = MyModel1
+
         reveal_type(kls.objects)  # N: Revealed type is "django.db.models.manager.Manager[myapp.models.MyModel1] | django.db.models.manager.Manager[myapp.models.MyModel2]"
         reveal_type(kls.objects.all())  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, myapp.models.MyModel1] | django.db.models.query.QuerySet[myapp.models.MyModel2, myapp.models.MyModel2]"
         reveal_type(kls.objects.get())  # N: Revealed type is "myapp.models.MyModel1 | myapp.models.MyModel2"
+
+        # Regular QuerySet
+        foos = MyModel1.objects.all()
+        bars = MyModel2.objects.all()
+
+        reveal_type(foos.union(bars)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, myapp.models.MyModel1]"
+        reveal_type(foos.intersection(bars)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, myapp.models.MyModel1]"
+        reveal_type(foos.difference(bars)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, myapp.models.MyModel1]"
+
+        # `values_list()` QuerySet
+        foos_list = MyModel1.objects.all().values_list("name")
+        bars_list = MyModel2.objects.all().values_list("name")
+
+        reveal_type(foos_list.union(bars_list)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, tuple[builtins.str]]"
+        reveal_type(foos_list.intersection(bars_list)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, tuple[builtins.str]]"
+        reveal_type(foos_list.difference(bars_list)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, tuple[builtins.str]]"
+
+        def union_values_list() -> models.QuerySet[models.Model, tuple[str]]:
+            union = foos_list.union(bars_list)
+            return union
+
+        # `values()` QuerySet -- One field, same name
+        foos_dict = MyModel1.objects.all().values("name")
+        bars_dict = MyModel2.objects.all().values("name")
+
+        reveal_type(foos_dict.union(bars_dict)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str})]"
+        reveal_type(foos_dict.intersection(bars_dict)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str})]"
+        reveal_type(foos_dict.difference(bars_dict)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str})]"
+
+        # `values()` QuerySet -- One field, different name, the first one takes precedence.
+        # cf https://docs.djangoproject.com/en/5.2/ref/models/querysets/#django.db.models.query.QuerySet.union
+        foos_dict2 = MyModel1.objects.all().values("name")
+        bars_dict2 = MyModel2.objects.all().values("id")
+
+        reveal_type(foos_dict2.union(bars_dict2)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str})]"
+        reveal_type(foos_dict2.intersection(bars_dict2)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str})]"
+        reveal_type(foos_dict2.difference(bars_dict2)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str})]"
+
+        # `values()` QuerySet -- Multiple field, same names
+        foos_dict3 = MyModel1.objects.all().values("name", "id")
+        bars_dict3 = MyModel2.objects.all().values("name", "id")
+
+        reveal_type(foos_dict3.union(bars_dict3)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str, 'id': builtins.int})]"
+        reveal_type(foos_dict3.intersection(bars_dict3)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str, 'id': builtins.int})]"
+        reveal_type(foos_dict3.difference(bars_dict3)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str, 'id': builtins.int})]"
+
+        # Mixing `values()` and `values_list()` is apparently ok and takes the type of the first queryset
+        foos_dict4 = MyModel1.objects.all().values("name", "id")
+        bars_list4 = MyModel2.objects.all().values_list("name", "id")
+
+        reveal_type(foos_dict4.union(bars_list4)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str, 'id': builtins.int})]"
+        reveal_type(foos_dict4.intersection(bars_list4)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str, 'id': builtins.int})]"
+        reveal_type(foos_dict4.difference(bars_list4)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str, 'id': builtins.int})]"
+
+        # TODO: Should be an error (mixed number of selected columns) -- runtime raises 'The used SELECT statements have a different number of columns'
+        foos_dict5 = MyModel1.objects.all().values("name", "id")
+        bars_dict5 = MyModel2.objects.all().values("name")
+
+        reveal_type(foos_dict5.union(bars_dict5)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str, 'id': builtins.int})]"
+        reveal_type(foos_dict5.intersection(bars_dict5)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str, 'id': builtins.int})]"
+        reveal_type(foos_dict5.difference(bars_dict5)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel1, TypedDict({'name': builtins.str, 'id': builtins.int})]"
+
+        # TODO: Should be an error (mixed number of columns) -- runtime raises 'The used SELECT statements have a different number of columns'
+        model2_qs = MyModel2.objects.all()
+        user_qs = User.objects.all()
+
+        reveal_type(model2_qs.union(bars_dict5)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel2, myapp.models.MyModel2]"
+        reveal_type(model2_qs.intersection(bars_dict5)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel2, myapp.models.MyModel2]"
+        reveal_type(model2_qs.difference(bars_dict5)) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.MyModel2, myapp.models.MyModel2]"
+
+
     installed_apps:
+        - django.contrib.auth
+        - django.contrib.contenttypes
         - myapp
     files:
         -   path: myapp/__init__.py
@@ -74,15 +160,177 @@
             content: |
                 from django.db import models
                 class MyModel1(models.Model):
-                    pass
+                    name = models.TextField(blank=False, null=False)
                 class MyModel2(models.Model):
-                    pass
+                    name = models.TextField(blank=False, null=False)
 
 -   case: select_related_returns_queryset
     main: |
+        from typing_extensions import reveal_type
         from myapp.models import Book
-        reveal_type(Book.objects.select_related())  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Book, myapp.models.Book]"
-        reveal_type(Book.objects.filter(pk=1).select_related())  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Book, myapp.models.Book]"
+        reveal_type(Book.objects.select_related())
+        reveal_type(Book.objects.filter(pk=1).select_related())
+
+        Book.objects.select_related()
+        Book.objects.all().select_related()
+        Book.objects.select_related(None)
+        Book.objects.all().select_related(None)
+        Book.objects.select_related("author", "dd") # E: Invalid field name "dd" in select_related lookup. Choices are: author  [misc]
+        Book.objects.all().select_related("author", "dd") # E: Invalid field name "dd" in select_related lookup. Choices are: author  [misc]
+
+        Book.objects.select_related("None", None)
+        Book.objects.all().select_related("None", None)
+        Book.objects.select_related(1)
+        Book.objects.all().select_related(1)
+        Book.objects.select_related(True)
+        Book.objects.all().select_related(True)
+    out: |
+      main:3: note: Revealed type is "django.db.models.query.QuerySet[myapp.models.Book, myapp.models.Book]"
+      main:4: note: Revealed type is "django.db.models.query.QuerySet[myapp.models.Book, myapp.models.Book]"
+      main:13: error: No overload variant of "select_related" of "Manager" matches argument types "str", "None"  [call-overload]
+      main:13: note: Possible overload variants:
+      main:13: note:     def select_related(self, None, /) -> QuerySet[Book, Book]
+      main:13: note:     def select_related(self, *fields: str) -> QuerySet[Book, Book]
+      main:14: error: No overload variant of "select_related" of "QuerySet" matches argument types "str", "None"  [call-overload]
+      main:14: note: Possible overload variants:
+      main:14: note:     def select_related(self, None, /) -> QuerySet[Book, Book]
+      main:14: note:     def select_related(self, *fields: str) -> QuerySet[Book, Book]
+      main:15: error: No overload variant of "select_related" of "Manager" matches argument type "int"  [call-overload]
+      main:15: note: Possible overload variants:
+      main:15: note:     def select_related(self, None, /) -> QuerySet[Book, Book]
+      main:15: note:     def select_related(self, *fields: str) -> QuerySet[Book, Book]
+      main:16: error: No overload variant of "select_related" of "QuerySet" matches argument type "int"  [call-overload]
+      main:16: note: Possible overload variants:
+      main:16: note:     def select_related(self, None, /) -> QuerySet[Book, Book]
+      main:16: note:     def select_related(self, *fields: str) -> QuerySet[Book, Book]
+      main:17: error: No overload variant of "select_related" of "Manager" matches argument type "bool"  [call-overload]
+      main:17: note: Possible overload variants:
+      main:17: note:     def select_related(self, None, /) -> QuerySet[Book, Book]
+      main:17: note:     def select_related(self, *fields: str) -> QuerySet[Book, Book]
+      main:18: error: No overload variant of "select_related" of "QuerySet" matches argument type "bool"  [call-overload]
+      main:18: note: Possible overload variants:
+      main:18: note:     def select_related(self, None, /) -> QuerySet[Book, Book]
+      main:18: note:     def select_related(self, *fields: str) -> QuerySet[Book, Book]
+
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Person(models.Model):
+                    pass
+
+                class Book(models.Model):
+                    author = models.ForeignKey(Person, on_delete=models.CASCADE)
+
+-   case: prefetch_related_returns_queryset
+    main: |
+        from typing_extensions import reveal_type
+        from myapp.models import Book
+        reveal_type(Book.objects.prefetch_related())
+        reveal_type(Book.objects.filter(pk=1).prefetch_related())
+
+        Book.objects.prefetch_related()
+        Book.objects.all().prefetch_related()
+        Book.objects.prefetch_related(None)
+        Book.objects.all().prefetch_related(None)
+        Book.objects.prefetch_related("author", "dd") # E: Cannot find "dd" on "Book" object, "dd" is an invalid parameter to "prefetch_related()"  [misc]
+        Book.objects.all().prefetch_related("author", "dd") # E: Cannot find "dd" on "Book" object, "dd" is an invalid parameter to "prefetch_related()"  [misc]
+
+        Book.objects.prefetch_related("None", None)
+        Book.objects.all().prefetch_related("None", None)
+        Book.objects.prefetch_related(1)
+        Book.objects.all().prefetch_related(1)
+        Book.objects.prefetch_related(True)
+        Book.objects.all().prefetch_related(True)
+    out: |
+      main:3: note: Revealed type is "django.db.models.query.QuerySet[myapp.models.Book, myapp.models.Book]"
+      main:4: note: Revealed type is "django.db.models.query.QuerySet[myapp.models.Book, myapp.models.Book]"
+      main:13: error: No overload variant of "prefetch_related" of "Manager" matches argument types "str", "None"  [call-overload]
+      main:13: note: Possible overload variants:
+      main:13: note:     def prefetch_related(self, None, /) -> QuerySet[Book, Book]
+      main:13: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> QuerySet[Book, Book]
+      main:14: error: No overload variant of "prefetch_related" of "QuerySet" matches argument types "str", "None"  [call-overload]
+      main:14: note: Possible overload variants:
+      main:14: note:     def prefetch_related(self, None, /) -> QuerySet[Book, Book]
+      main:14: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> QuerySet[Book, Book]
+      main:15: error: No overload variant of "prefetch_related" of "Manager" matches argument type "int"  [call-overload]
+      main:15: note: Possible overload variants:
+      main:15: note:     def prefetch_related(self, None, /) -> QuerySet[Book, Book]
+      main:15: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> QuerySet[Book, Book]
+      main:16: error: No overload variant of "prefetch_related" of "QuerySet" matches argument type "int"  [call-overload]
+      main:16: note: Possible overload variants:
+      main:16: note:     def prefetch_related(self, None, /) -> QuerySet[Book, Book]
+      main:16: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> QuerySet[Book, Book]
+      main:17: error: No overload variant of "prefetch_related" of "Manager" matches argument type "bool"  [call-overload]
+      main:17: note: Possible overload variants:
+      main:17: note:     def prefetch_related(self, None, /) -> QuerySet[Book, Book]
+      main:17: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> QuerySet[Book, Book]
+      main:18: error: No overload variant of "prefetch_related" of "QuerySet" matches argument type "bool"  [call-overload]
+      main:18: note: Possible overload variants:
+      main:18: note:     def prefetch_related(self, None, /) -> QuerySet[Book, Book]
+      main:18: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> QuerySet[Book, Book]
+
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Person(models.Model):
+                    pass
+
+                class Book(models.Model):
+                    author = models.ForeignKey(Person, on_delete=models.CASCADE)
+
+-   case: prefetch_related_returns_raw_queryset
+    main: |
+        from myapp.models import Book
+        raw_qs = Book.objects.raw("SELECT 1")
+        raw_qs_from_manager = Book.objects.raw("SELECT 1")
+
+        raw_qs_from_manager.prefetch_related()
+        raw_qs.prefetch_related()
+        raw_qs_from_manager.prefetch_related(None)
+        raw_qs.prefetch_related(None)
+        raw_qs_from_manager.prefetch_related("author", "dd") # Should be Error on invalid lookup 'dd' !
+        raw_qs.prefetch_related("author", "dd") # Should be Error on invalid lookup 'dd' !
+
+        raw_qs_from_manager.prefetch_related("None", None)
+        raw_qs.prefetch_related("None", None)
+        raw_qs_from_manager.prefetch_related(1)
+        raw_qs.prefetch_related(1)
+        raw_qs_from_manager.prefetch_related(True)
+        raw_qs.prefetch_related(True)
+    out: |
+      main:12: error: No overload variant of "prefetch_related" of "RawQuerySet" matches argument types "str", "None"  [call-overload]
+      main:12: note: Possible overload variants:
+      main:12: note:     def prefetch_related(self, None, /) -> RawQuerySet[Book]
+      main:12: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> RawQuerySet[Book]
+      main:13: error: No overload variant of "prefetch_related" of "RawQuerySet" matches argument types "str", "None"  [call-overload]
+      main:13: note: Possible overload variants:
+      main:13: note:     def prefetch_related(self, None, /) -> RawQuerySet[Book]
+      main:13: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> RawQuerySet[Book]
+      main:14: error: No overload variant of "prefetch_related" of "RawQuerySet" matches argument type "int"  [call-overload]
+      main:14: note: Possible overload variants:
+      main:14: note:     def prefetch_related(self, None, /) -> RawQuerySet[Book]
+      main:14: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> RawQuerySet[Book]
+      main:15: error: No overload variant of "prefetch_related" of "RawQuerySet" matches argument type "int"  [call-overload]
+      main:15: note: Possible overload variants:
+      main:15: note:     def prefetch_related(self, None, /) -> RawQuerySet[Book]
+      main:15: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> RawQuerySet[Book]
+      main:16: error: No overload variant of "prefetch_related" of "RawQuerySet" matches argument type "bool"  [call-overload]
+      main:16: note: Possible overload variants:
+      main:16: note:     def prefetch_related(self, None, /) -> RawQuerySet[Book]
+      main:16: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> RawQuerySet[Book]
+      main:17: error: No overload variant of "prefetch_related" of "RawQuerySet" matches argument type "bool"  [call-overload]
+      main:17: note: Possible overload variants:
+      main:17: note:     def prefetch_related(self, None, /) -> RawQuerySet[Book]
+      main:17: note:     def [_LookupT: str, _PrefetchedQuerySetT: QuerySet[Model, Model], _ToAttrT: str] prefetch_related(self, *lookups: str | Prefetch[_LookupT, _PrefetchedQuerySetT, _ToAttrT]) -> RawQuerySet[Book]
+
     installed_apps:
         - myapp
     files:

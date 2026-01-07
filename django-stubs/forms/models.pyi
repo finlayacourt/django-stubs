@@ -109,7 +109,7 @@ def modelform_factory(
 
 _ModelFormT = TypeVar("_ModelFormT", bound=ModelForm)
 
-class BaseModelFormSet(Generic[_M, _ModelFormT], BaseFormSet[_ModelFormT]):
+class BaseModelFormSet(BaseFormSet[_ModelFormT], Generic[_M, _ModelFormT]):
     model: type[_M]
     edit_only: bool
     unique_fields: Collection[str]
@@ -172,7 +172,7 @@ def modelformset_factory(
     edit_only: bool = False,
 ) -> type[BaseModelFormSet[_M, _ModelFormT]]: ...
 
-class BaseInlineFormSet(Generic[_M, _ParentM, _ModelFormT], BaseModelFormSet[_M, _ModelFormT]):
+class BaseInlineFormSet(BaseModelFormSet[_M, _ModelFormT], Generic[_M, _ParentM, _ModelFormT]):
     instance: _ParentM
     save_as_new: bool
     unique_fields: Collection[str]
@@ -317,16 +317,16 @@ def _get_foreign_key(
 ) -> ForeignKey: ...
 
 __all__ = (
-    "ModelForm",
-    "BaseModelForm",
-    "model_to_dict",
-    "fields_for_model",
-    "ModelChoiceField",
-    "ModelMultipleChoiceField",
     "ALL_FIELDS",
-    "BaseModelFormSet",
-    "modelformset_factory",
     "BaseInlineFormSet",
+    "BaseModelForm",
+    "BaseModelFormSet",
+    "ModelChoiceField",
+    "ModelForm",
+    "ModelMultipleChoiceField",
+    "fields_for_model",
     "inlineformset_factory",
+    "model_to_dict",
     "modelform_factory",
+    "modelformset_factory",
 )

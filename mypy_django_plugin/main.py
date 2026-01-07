@@ -64,15 +64,14 @@ class NewSemanalDjangoPlugin(Plugin):
         self.django_context = DjangoContext(self.plugin_config.django_settings_module)
 
     def _get_current_form_bases(self) -> dict[str, int]:
-        model_sym = self.lookup_fully_qualified(fullnames.BASEFORM_CLASS_FULLNAME)
-        if model_sym is not None and isinstance(model_sym.node, TypeInfo):
-            bases = helpers.get_django_metadata_bases(model_sym.node, "baseform_bases")
+        model_info = self._get_typeinfo_or_none(fullnames.BASEFORM_CLASS_FULLNAME)
+        if model_info:
+            bases = helpers.get_django_metadata_bases(model_info, "baseform_bases")
             bases[fullnames.BASEFORM_CLASS_FULLNAME] = 1
             bases[fullnames.FORM_CLASS_FULLNAME] = 1
             bases[fullnames.MODELFORM_CLASS_FULLNAME] = 1
             return bases
-        else:
-            return {}
+        return {}
 
     def _get_typeinfo_or_none(self, class_name: str) -> TypeInfo | None:
         sym = self.lookup_fully_qualified(class_name)
@@ -124,10 +123,13 @@ class NewSemanalDjangoPlugin(Plugin):
                 if related_model_module != file.fullname:
                     deps.add(self._new_dependency(related_model_module))
 
-        return list(deps) + [
-            # for QuerySet.annotate
+        return [
+            *deps,
+            # For `QuerySet.annotate`
             self._new_dependency("django_stubs_ext"),
-            # For Manager.from_queryset
+            # For `TypedModelMeta` lookup in model transformers
+            self._new_dependency("django_stubs_ext.db.models"),
+            # For `Manager.from_queryset`
             self._new_dependency("django.db.models.query"),
         ]
 
@@ -162,9 +164,17 @@ class NewSemanalDjangoPlugin(Plugin):
             "acreate": partial(init_create.typecheck_model_acreate, django_context=self.django_context),
             "filter": typecheck_filtering_method,
             "get": typecheck_filtering_method,
+            "aget": typecheck_filtering_method,
             "exclude": typecheck_filtering_method,
             "prefetch_related": partial(
                 querysets.extract_prefetch_related_annotations, django_context=self.django_context
+            ),
+            "select_related": partial(querysets.validate_select_related, django_context=self.django_context),
+            "bulk_update": partial(
+                querysets.validate_bulk_update, django_context=self.django_context, method="bulk_update"
+            ),
+            "abulk_update": partial(
+                querysets.validate_bulk_update, django_context=self.django_context, method="abulk_update"
             ),
         }
 
@@ -201,25 +211,20 @@ class NewSemanalDjangoPlugin(Plugin):
         return None
 
     def get_customize_class_mro_hook(self, fullname: str) -> Callable[[ClassDefContext], None] | None:
-        sym = self.lookup_fully_qualified(fullname)
-        if (
-            sym is not None
-            and isinstance(sym.node, TypeInfo)
-            and sym.node.has_base(fullnames.BASE_MANAGER_CLASS_FULLNAME)
-        ):
+        info = self._get_typeinfo_or_none(fullname)
+        if info and info.has_base(fullnames.BASE_MANAGER_CLASS_FULLNAME):
             return reparametrize_any_manager_hook
-        else:
-            return None
+        return None
 
     def get_metaclass_hook(self, fullname: str) -> Callable[[ClassDefContext], None] | None:
         if fullname == fullnames.MODEL_METACLASS_FULLNAME:
-            return MetaclassAdjustments.adjust_model_class
+            return partial(MetaclassAdjustments.adjust_model_class, plugin_config=self.plugin_config)
         return None
 
     def get_base_class_hook(self, fullname: str) -> Callable[[ClassDefContext], None] | None:
         # Base class is a Model class definition
-        sym = self.lookup_fully_qualified(fullname)
-        if sym is not None and isinstance(sym.node, TypeInfo) and helpers.is_model_type(sym.node):
+        info = self._get_typeinfo_or_none(fullname)
+        if info and helpers.is_model_type(info):
             return partial(process_model_class, django_context=self.django_context)
 
         # Base class is a Form class definition
@@ -227,7 +232,7 @@ class NewSemanalDjangoPlugin(Plugin):
             return forms.transform_form_class
 
         # Base class is a QuerySet class definition
-        if sym is not None and isinstance(sym.node, TypeInfo) and sym.node.has_base(fullnames.QUERYSET_CLASS_FULLNAME):
+        if info and info.has_base(fullnames.QUERYSET_CLASS_FULLNAME):
             return add_as_manager_to_queryset_class
         return None
 
@@ -278,7 +283,7 @@ class NewSemanalDjangoPlugin(Plugin):
     def get_type_analyze_hook(self, fullname: str) -> Callable[[AnalyzeTypeContext], MypyType] | None:
         if fullname in fullnames.ANNOTATED_TYPES_FULLNAMES:
             return partial(handle_annotated_type, fullname=fullname)
-        elif fullname == "django.contrib.auth.models._User":
+        if fullname == "django.contrib.auth.models._User":
             return partial(get_user_model, django_context=self.django_context)
         return None
 
@@ -293,11 +298,9 @@ class NewSemanalDjangoPlugin(Plugin):
 
     def report_config_data(self, ctx: ReportConfigContext) -> dict[str, Any]:
         # Cache would be cleared if any settings do change.
-        extra_data = {}
-        # In all places we use '_User' alias as a type we want to clear cache if
-        # AUTH_USER_MODEL setting changes
-        if ctx.id.startswith("django.contrib.auth") or ctx.id in {"django.http.request", "django.test.client"}:
-            extra_data["AUTH_USER_MODEL"] = self.django_context.settings.AUTH_USER_MODEL
+        extra_data = {
+            "AUTH_USER_MODEL": self.django_context.settings.AUTH_USER_MODEL,
+        }
         return self.plugin_config.to_json(extra_data)
 
 

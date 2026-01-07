@@ -1,6 +1,6 @@
 -   case: annotate_using_with_annotations
     main: |
-        from typing_extensions import Annotated
+        from typing_extensions import Annotated, reveal_type
         from myapp.models import User
         from django_stubs_ext import WithAnnotations, Annotations
         from django.db.models.expressions import Value
@@ -46,7 +46,7 @@
 -   case: annotate_using_with_annotations_typeddict
     main: |
         from typing import Any
-        from typing_extensions import Annotated, TypedDict
+        from typing_extensions import Annotated, TypedDict, reveal_type
         from myapp.models import User
         from django_stubs_ext import WithAnnotations, Annotations
         from django.db.models.expressions import Value
@@ -128,6 +128,7 @@
 
 -   case: annotate_basic
     main: |
+        from typing_extensions import reveal_type
         from myapp.models import User
         from django.db.models.expressions import F
 
@@ -153,6 +154,7 @@
 
 -   case: annotate_no_field_name
     main: |
+        from typing_extensions import reveal_type
         from myapp.models import User
         from django.db.models import Count
 
@@ -202,6 +204,7 @@
 
 -   case: annotate_twice_works
     main: |
+        from typing_extensions import reveal_type
         from myapp.models import User
         from django.db.models.expressions import F
 
@@ -229,7 +232,7 @@
         from django_stubs_ext import WithAnnotations
         from django.db.models import QuerySet
         from django.db.models.expressions import F
-        from typing_extensions import TypedDict
+        from typing_extensions import TypedDict, reveal_type
 
         qs = User.objects.filter(id=1)
 
@@ -275,6 +278,7 @@
 
 -   case: annotate_values_or_values_list_before_or_after_annotate_broadens_type
     main: |
+        from typing_extensions import reveal_type
         from myapp.models import Blog
         from django.db.models.expressions import F
 
@@ -399,6 +403,7 @@
 
 - case: test_annotate_allows_any_lookups_in_filter
   main: |
+    from typing_extensions import reveal_type
     from django.db import models
     from myapp.models import Blog
 
@@ -409,9 +414,9 @@
     qs.filter(distance__lt__lt=10)
     qs.filter(distance__unknown_lookup=10)
   out: |
-    main:5: note: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog@AnnotatedWith[TypedDict({'distance': Any})], myapp.models.Blog@AnnotatedWith[TypedDict({'distance': Any})]]"
     main:6: note: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog@AnnotatedWith[TypedDict({'distance': Any})], myapp.models.Blog@AnnotatedWith[TypedDict({'distance': Any})]]"
     main:7: note: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog@AnnotatedWith[TypedDict({'distance': Any})], myapp.models.Blog@AnnotatedWith[TypedDict({'distance': Any})]]"
+    main:8: note: Revealed type is "django.db.models.query.QuerySet[myapp.models.Blog@AnnotatedWith[TypedDict({'distance': Any})], myapp.models.Blog@AnnotatedWith[TypedDict({'distance': Any})]]"
   installed_apps:
     - myapp
   files:
@@ -420,3 +425,73 @@
       content: |
         from django.db import models
         class Blog(models.Model): pass
+
+-   case: test_annotate_existing_field
+    installed_apps:
+        - django.contrib.auth
+        - django.contrib.contenttypes
+    main: |
+        from typing import Any
+        from typing_extensions import TypedDict
+        from django.db import models
+        from django.db.models import Prefetch, F, QuerySet
+        from django.contrib.auth.models import User, Group
+        from django_stubs_ext.annotations import WithAnnotations
+
+        # Error on existing field / remapped field / previous annotation
+        User.objects.annotate(username=F("username")) # E: Attribute "username" already defined on "django.contrib.auth.models.User"  [no-redef]
+        User.objects.values(foo=F("id")).annotate(foo=F("username")) # E: Attribute "foo" already defined on "django.contrib.auth.models.User"  [no-redef]
+        User.objects.annotate(computed=F('id')).annotate(computed=F('username')) # E: Attribute "computed" already defined on "django.contrib.auth.models.User@AnnotatedWith[TypedDict({'computed': Any})]"  [no-redef]
+
+        # Should be ok if filtered with `values` / `values_list`
+        User.objects.values_list("id").annotate(username=F("username"))
+        User.objects.values("id").annotate(username=F("username"))
+        User.objects.values_list("id", named=True).annotate(username=F("username"))
+
+        def get_with_values_list() -> QuerySet[User, tuple[int]]:
+            return User.objects.values_list("id")
+
+        get_with_values_list().annotate(username=F("username"))
+
+        class OnlyIdDict(TypedDict):
+            id: int
+
+        def get_with_values() -> QuerySet[User, OnlyIdDict]:
+            return User.objects.values("id")
+
+        get_with_values().annotate(username=F("username"))
+
+        # But still cause issue if overlapping with other symbols (methods, ...)
+        User.objects.values_list("id").annotate(get_full_name=F("username")) # E: Attribute "get_full_name" already defined on "django.contrib.auth.models.User"  [no-redef]
+        User.objects.values("id").annotate(get_full_name=F("username")) # E: Attribute "get_full_name" already defined on "django.contrib.auth.models.User"  [no-redef]
+
+        # No false positive on approximative row types
+        tuple_any_row: models.QuerySet[User, tuple[Any, ...]]
+        tuple_any_row.annotate(username=F("username"))
+
+        any_row: models.QuerySet[User, Any]
+        any_row.annotate(username=F("username"))
+
+        dict_row: models.QuerySet[User, dict]
+        dict_row.annotate(username=F("username"))
+
+        # Ensure collisions with methods are still errors in approximate contexts
+        get_with_values_list().annotate(get_full_name=F("username")) # E: Attribute "get_full_name" already defined on "django.contrib.auth.models.User"  [no-redef]
+        tuple_any_row.annotate(get_full_name=F("username")) # E: Attribute "get_full_name" already defined on "django.contrib.auth.models.User"  [no-redef]
+        any_row.annotate(get_full_name=F("username")) # E: Attribute "get_full_name" already defined on "django.contrib.auth.models.User"  [no-redef]
+        dict_row.annotate(get_full_name=F("username")) # E: Attribute "get_full_name" already defined on "django.contrib.auth.models.User"  [no-redef]
+
+        # Named values_list
+
+        # Test name collision with model methods in named values_list - should still error
+        User.objects.values_list("id", named=True).annotate(get_full_name=F("username"))  # E: Attribute "get_full_name" already defined on "django.contrib.auth.models.User"  [no-redef]
+        User.objects.values_list("username", named=True).annotate(get_full_name=F("first_name"))  # E: Attribute "get_full_name" already defined on "django.contrib.auth.models.User"  [no-redef]
+        User.objects.values_list("id", named=True).annotate(is_anonymous=F("username"))  # E: Attribute "is_anonymous" already defined on "django.contrib.auth.models.User"  [no-redef]
+
+        # Test name collision with model fields when field is NOT in values_list - should be OK
+        User.objects.values_list("id", named=True).annotate(username=F("first_name"))
+        User.objects.values_list("first_name", named=True).annotate(username=F("last_name"))
+
+        # Test name collision with model fields when field IS in values_list - should error
+        User.objects.values_list("username", named=True).annotate(username=F("first_name"))  # E: Attribute "username" already defined on "django.contrib.auth.models.User"  [no-redef]
+        User.objects.values_list("id", "username", named=True).annotate(username=F("first_name"))  # E: Attribute "username" already defined on "django.contrib.auth.models.User"  [no-redef]

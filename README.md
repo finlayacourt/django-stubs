@@ -50,6 +50,11 @@ We rely on different `django` and `mypy` versions:
 
 | django-stubs   | Mypy version | Django version | Django partial support | Python version |
 |----------------|--------------|----------------|------------------------|----------------|
+| 5.2.7          | 1.13 - 1.18  | 5.2            | 5.1, 5.0               | 3.10 - 3.13    |
+| 5.2.6          | 1.13 - 1.18  | 5.2            | 5.1, 5.0               | 3.10 - 3.13    |
+| 5.2.5          | 1.13 - 1.18  | 5.2            | 5.1, 5.0               | 3.10 - 3.13    |
+| 5.2.4          | 1.13 - 1.18  | 5.2            | 5.1, 5.0               | 3.10 - 3.13    |
+| 5.2.3          | 1.13 - 1.18  | 5.2            | 5.1, 5.0               | 3.10 - 3.13    |
 | 5.2.2          | 1.13 - 1.17  | 5.2            | 5.1, 5.0               | 3.10 - 3.13    |
 | 5.2.1          | 1.13 - 1.16  | 5.2            | 5.1, 5.0               | 3.10 - 3.13    |
 | 5.2.0          | 1.13+        | 5.2            | 5.1, 5.0               | 3.10 - 3.13    |
@@ -80,6 +85,10 @@ https://github.com/typeddjango/django-stubs/discussions/2101#discussioncomment-9
 ## Features
 
 ### Type checking of Model Meta attributes
+
+> [!NOTE]
+> If you are using the mypy plugin and have `django_stub_ext` installed, your model `Meta` classes
+> will be automatically type-checked without further changes.
 
 By inheriting from the `TypedModelMeta` class, you can ensure you're using correct types for
 attributes:
@@ -118,6 +127,14 @@ The supported settings are:
 - `strict_settings`, a boolean, default `true`.
 
   Set to `false` if using dynamic settings, as [described below](https://github.com/typeddjango/django-stubs#how-to-use-a-custom-library-to-handle-django-settings).
+
+- `strict_model_abstract_attrs`, a boolean, default `true`.
+
+  Set to `false` if you want to keep `.objects`, `.DoesNotExist`,
+  and `.MultipleObjectsReturned` attributes on `models.Model` type.
+  [See here why](https://github.com/typeddjango/django-stubs?tab=readme-ov-file#how-to-use-typemodel-annotation-with-objects-attribute)
+  this is dangerous to do by default.
+
 
 ## FAQ
 
@@ -362,6 +379,11 @@ def assert_zero_count(model_type: type[models.Model]) -> None:
     assert model_type._default_manager.count() == 0
 ```
 
+Configurable with `strict_model_abstract_attrs = false`
+to skip removing `.objects`, `.DoesNotExist`, and `.MultipleObjectsReturned`
+attributes from `model.Model` if you are using our mypy plugin.
+
+Use this setting on your own risk, because it can hide valid errors.
 
 ### How to type a custom `models.Field`?
 

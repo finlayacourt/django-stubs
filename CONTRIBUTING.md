@@ -34,10 +34,12 @@ In order to be able to continuously sync your fork with the origin repository's 
 To do so follow this [official github guide](https://docs.github.com/en/free-pro-team@latest/github/collaborating-with-issues-and-pull-requests/syncing-a-fork).
 
 ### Dependency Setup
+
 We use [uv](https://github.com/astral-sh/uv) to manage our dev dependencies.
 To install it, see their [installation guide](https://docs.astral.sh/uv/getting-started/installation/)
 
 Once it's done, simply run the following command to automatically setup a virtual environment and install dev dependencies:
+
 ```bash
 uv sync
 source .venv/bin/activate
@@ -78,14 +80,13 @@ rm -r .mypy_cache
 Run `./scripts/stubtest.sh` to test that stubs and sources are in-line.
 
 We have some special files to allow errors:
+
 1. `scripts/stubtest/allowlist.txt` where we store things that we really don't care about: hacks, django internal utility modules, things that are handled by our plugin, things that are not representable by type system, etc
 2. `scripts/stubtest/allowlist_todo.txt` where we store all errors there are right now. Basically, this is a TODO list: we need to work through this list and fix things (or move entries to real `allowlist.txt`). In the end, ideally we can remove this file.
-3. `scripts/stubtest/allowlist_todo_django51.txt` where we store new errors from the Django 5.0 to 5.1 upgrade. This is an extra TODO list.
+3. `scripts/stubtest/allowlist_todo_django52.txt` where we store new errors from the Django 5.0 to 5.2 upgrade. This is an extra TODO list.
 
 You might also want to disable `incremental` mode while working on `stubtest` changes.
 This mode leads to several known problems (stubs do not show up or have strange errors).
-
-**Important**: right now we only run `stubtest` on Python 3.12 (because it is the latest released version at the moment), any other versions might generate different outputs. Any work to create per-version allowlists is welcome.
 
 ## Submission Guidelines
 
@@ -113,10 +114,9 @@ We only add hints for private attributes when it has some demonstrated real-worl
 That means from a third-party package or some well described snippet for a project.
 This rule helps us avoid tying in too closely to Django’s undocumented internals.
 
-
 ## Releasing `django-stubs`
 
-1. Open a pull request that updates `setup.py`, `ext/setup.py` and `README.md`
+1. Open a pull request that updates `pyproject.toml`, `ext/pyproject.toml` and `README.md`
    (anyone can open this PR, not just maintainers):
 
     - Version number `major.minor.patch` is formed as follows:
@@ -125,11 +125,12 @@ This rule helps us avoid tying in too closely to Django’s undocumented interna
 
       `patch` is sequentially increasing for each stubs release. Reset to `0` if `major.minor` was updated.
 
-    - Update the `version=` value within `setup(...)` call in **both** `setup.py` files. The versions must be in sync.
-    - Update `django-stubs-ext>=` dependency in root `setup.py` to the same version number.
+    - Update the `version =` value within `[project]` section in **both** `pyproject.toml` files. The versions must be in sync.
+    - Update `django-stubs-ext>=` dependency in root `pyproject.toml` to the same version number.
+    - Run `uv lock` to update lockfile
     - Add a new row at the top of ['Version compatibility' table in README.md](README.md#version-compatibility).
     - Use pull request title "Version x.y.z release" by convention.
-    - Add the correct classifiers to `setup.py` if support is added for a new Python or Django version
+    - Add the correct classifiers to `classifiers =` if support is added for a new Python or Django version
 
 2. Ensure the CI succeeds. A maintainer must merge this PR. If it's just a version bump, no need
    to wait for a second maintainer's approval.

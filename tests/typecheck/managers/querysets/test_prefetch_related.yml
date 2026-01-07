@@ -1,25 +1,27 @@
 -   case: prefetch_related_to_attr
+    installed_apps:
+        - myapp
     main: |
         from myapp.models import Article, Tag
         from django.db.models import Prefetch, F, QuerySet
         from django.db import models
-        from typing_extensions import Literal, TypedDict
+        from typing_extensions import Literal, TypedDict, reveal_type
         from django_stubs_ext import WithAnnotations
 
         ### Noop (to_attr not provided)
         reveal_type(Article.objects.prefetch_related(Prefetch("tags")).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article, myapp.models.Article]"
         reveal_type(Article.objects.prefetch_related(Prefetch("tags", Tag.objects.all())).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article, myapp.models.Article]"
-        reveal_type(Prefetch("tags")) # N: Revealed type is "django.db.models.query.Prefetch[django.db.models.query.QuerySet[django.db.models.base.Model, django.db.models.base.Model], builtins.str]"
-        reveal_type(Prefetch("tags", Tag.objects.all())) # N: Revealed type is "django.db.models.query.Prefetch[django.db.models.query.QuerySet[myapp.models.Tag, myapp.models.Tag], builtins.str]"
+        reveal_type(Prefetch("tags")) # N: Revealed type is "django.db.models.query.Prefetch[Literal['tags'], django.db.models.query.QuerySet[django.db.models.base.Model, django.db.models.base.Model], builtins.str]"
+        reveal_type(Prefetch("tags", Tag.objects.all())) # N: Revealed type is "django.db.models.query.Prefetch[Literal['tags'], django.db.models.query.QuerySet[myapp.models.Tag, myapp.models.Tag], builtins.str]"
 
         # Prefetch created in a function with no to_attr
-        def get_prefetch_no_to_attr() -> Prefetch[QuerySet[Tag]]:
+        def get_prefetch_no_to_attr() -> Prefetch[Literal["tags"], QuerySet[Tag]]:
             return Prefetch("tags", Tag.objects.all())
 
         reveal_type(Article.objects.prefetch_related(get_prefetch_no_to_attr()).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article, myapp.models.Article]"
 
         # Prefetch created in a function with no to_attr and no queryset
-        def get_prefetch_no_to_attr_no_qs() -> Prefetch:
+        def get_prefetch_no_to_attr_no_qs() -> Prefetch[Literal["tags"]]:
             return Prefetch("tags")
 
         reveal_type(Article.objects.prefetch_related(get_prefetch_no_to_attr_no_qs()).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article, myapp.models.Article]"
@@ -30,7 +32,7 @@
         reveal_type(article_qs.get().every_tags) # N: Revealed type is "builtins.list[myapp.models.Tag]"
         reveal_type(
             Tag.objects.all().prefetch_related( # N: Revealed type is "builtins.list[myapp.models.Article]"
-                Prefetch("article_set", Article.objects.all(), to_attr="every_articles")
+                Prefetch("tags", Article.objects.all(), to_attr="every_articles")
             ).get().every_articles
         )
 
@@ -42,7 +44,7 @@
         )
         reveal_type(
             Tag.objects.prefetch_related( # N: Revealed type is "builtins.list[myapp.models.Article]"
-                Prefetch("article_set", Article.objects.all(), to_attr="every_articles")
+                Prefetch("tags", Article.objects.all(), to_attr="every_articles")
             ).get().every_articles
         )
 
@@ -70,8 +72,8 @@
 
         # Mixed inline `Prefetch` and plain lookup string in one call; string should be ignored
         mixed_plain = Article.objects.prefetch_related(
-            "article_set",
-            Prefetch("article_set", Article.objects.all(), to_attr="arts3"),
+            "tags",
+            Prefetch("tags", Article.objects.all(), to_attr="arts3"),
         )
         reveal_type(mixed_plain) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article@AnnotatedWith[TypedDict({'arts3': builtins.list[myapp.models.Article]})], myapp.models.Article@AnnotatedWith[TypedDict({'arts3': builtins.list[myapp.models.Article]})]]"
 
@@ -85,17 +87,17 @@
         reveal_type(Article.objects.prefetch_related(tag_prefetch).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag]})], myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag]})]]"
 
         # Prefetch created in a function
-        def get_invalid_prefetch() -> Prefetch[QuerySet[Tag], Literal["every_tags"]]:
-            return Prefetch("tags", Tag.objects.all(), to_attr="foo") # E: Incompatible return value type (got "Prefetch[QuerySet[Tag, Tag], Literal['foo']]", expected "Prefetch[QuerySet[Tag, Tag], Literal['every_tags']]")  [return-value] # E: Argument "to_attr" to "Prefetch" has incompatible type "Literal['foo']"; expected "Literal['every_tags'] | None"  [arg-type]
+        def get_invalid_prefetch() -> Prefetch[Literal["tags"], QuerySet[Tag], Literal["every_tags"]]:
+            return Prefetch("tags", Tag.objects.all(), to_attr="foo") # E: Incompatible return value type (got "Prefetch[Literal['tags'], QuerySet[Tag, Tag], Literal['foo']]", expected "Prefetch[Literal['tags'], QuerySet[Tag, Tag], Literal['every_tags']]")  [return-value] # E: Argument "to_attr" to "Prefetch" has incompatible type "Literal['foo']"; expected "Literal['every_tags'] | None"  [arg-type]
 
-        def get_prefetch() -> Prefetch[QuerySet[Tag], Literal["every_tags"]]:
+        def get_prefetch() -> Prefetch[Literal["tags"], QuerySet[Tag], Literal["every_tags"]]:
             return Prefetch("tags", Tag.objects.all(), to_attr="every_tags")
 
         reveal_type(Article.objects.prefetch_related(get_prefetch()).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag]})], myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag]})]]"
 
         # Prefetch created in a function with to_attr as an intermediary variable
-        def get_prefetch_with_var() -> Prefetch[QuerySet[Tag], Literal["every_tags"]]:
-            to_attr = "every_tags" # TODO: RM error next line
+        def get_prefetch_with_var() -> Prefetch[Literal["tags"], QuerySet[Tag], Literal["every_tags"]]:
+            to_attr = "every_tags"
             return Prefetch("tags", Tag.objects.all(), to_attr) # E: Argument 3 to "Prefetch" has incompatible type "str"; expected "Literal['every_tags'] | None"  [arg-type]
 
         reveal_type(Article.objects.prefetch_related(get_prefetch_with_var()).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag]})], myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag]})]]"
@@ -103,7 +105,7 @@
         # Mixed inline `Prefetch` and variable `Prefetch` in one call
         mixed_qs = Article.objects.prefetch_related(
             tag_prefetch,
-            Prefetch("article_set", Article.objects.all(), to_attr="arts2"),
+            Prefetch("tags", Article.objects.all(), to_attr="arts2"),
         )
         reveal_type(mixed_qs) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag], 'arts2': builtins.list[myapp.models.Article]})], myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag], 'arts2': builtins.list[myapp.models.Article]})]]"
 
@@ -118,13 +120,33 @@
         class MyDict(TypedDict):
             foo: str
 
-        def get_prefetch_with_annotations() -> Prefetch[QuerySet[WithAnnotations[Tag, MyDict]], Literal["every_tags"]]:
+        def get_prefetch_with_annotations() -> Prefetch[Literal["tags"], QuerySet[WithAnnotations[Tag, MyDict]], Literal["every_tags"]]:
             return Prefetch("tags", Tag.objects.annotate(foo=F("id")), "every_tags")
 
         reveal_type(Article.objects.prefetch_related(get_prefetch_with_annotations()).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag@AnnotatedWith[TypedDict('main.MyDict', {'foo': builtins.str})]]})], myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag@AnnotatedWith[TypedDict('main.MyDict', {'foo': builtins.str})]]})]]"
         reveal_type(Article.objects.prefetch_related(get_prefetch_with_annotations()).get().every_tags[0].foo) # N: Revealed type is "builtins.str"
-    installed_apps:
-        - myapp
+
+        # *args prefetch
+        first_prefetch = Prefetch("tags", Tag.objects.all(), to_attr="every_tags")
+        second_prefetch = Prefetch("tags", Tag.objects.all(), to_attr="every_tags2")
+        third_prefetch = Prefetch("tags", Tag.objects.all(), to_attr="every_tags3")
+        fourth_prefetch = Prefetch("tags", Tag.objects.all(), to_attr="every_tags4")
+        prefetch_objs = (first_prefetch, second_prefetch)
+
+        reveal_type(Article.objects.prefetch_related(*prefetch_objs).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag], 'every_tags2': builtins.list[myapp.models.Tag]})], myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag], 'every_tags2': builtins.list[myapp.models.Tag]})]]"
+        reveal_type(Article.objects.prefetch_related(third_prefetch, *prefetch_objs).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article@AnnotatedWith[TypedDict({'every_tags3': builtins.list[myapp.models.Tag], 'every_tags': builtins.list[myapp.models.Tag], 'every_tags2': builtins.list[myapp.models.Tag]})], myapp.models.Article@AnnotatedWith[TypedDict({'every_tags3': builtins.list[myapp.models.Tag], 'every_tags': builtins.list[myapp.models.Tag], 'every_tags2': builtins.list[myapp.models.Tag]})]]"
+        reveal_type(Article.objects.prefetch_related(*prefetch_objs, third_prefetch).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag], 'every_tags2': builtins.list[myapp.models.Tag], 'every_tags3': builtins.list[myapp.models.Tag]})], myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag], 'every_tags2': builtins.list[myapp.models.Tag], 'every_tags3': builtins.list[myapp.models.Tag]})]]"
+        reveal_type(Article.objects.prefetch_related(fourth_prefetch, *prefetch_objs, third_prefetch).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article@AnnotatedWith[TypedDict({'every_tags4': builtins.list[myapp.models.Tag], 'every_tags': builtins.list[myapp.models.Tag], 'every_tags2': builtins.list[myapp.models.Tag], 'every_tags3': builtins.list[myapp.models.Tag]})], myapp.models.Article@AnnotatedWith[TypedDict({'every_tags4': builtins.list[myapp.models.Tag], 'every_tags': builtins.list[myapp.models.Tag], 'every_tags2': builtins.list[myapp.models.Tag], 'every_tags3': builtins.list[myapp.models.Tag]})]]"
+
+        # *args prefetch from helper function
+        def _get_prefetches() -> tuple[
+          Prefetch[Literal["tags"], QuerySet[Tag], Literal["every_tags"]],
+          Prefetch[Literal["tags"], QuerySet[Tag], Literal["every_tags2"]],
+        ]:
+            return prefetch_objs
+
+        reveal_type(Article.objects.prefetch_related(*_get_prefetches()).all()) # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag], 'every_tags2': builtins.list[myapp.models.Tag]})], myapp.models.Article@AnnotatedWith[TypedDict({'every_tags': builtins.list[myapp.models.Tag], 'every_tags2': builtins.list[myapp.models.Tag]})]]"
+
     files:
         -   path: myapp/__init__.py
         -   path: myapp/models.py
@@ -136,9 +158,13 @@
                     tags = models.ManyToManyField(to=Tag, related_name="articles", blank=True)
 
 -   case: prefetch_related_and_annotate
+    installed_apps:
+        - django.contrib.auth
+        - django.contrib.contenttypes
     main: |
         from django.db.models import Prefetch, F
         from django.contrib.auth.models import User, Group
+        from typing_extensions import reveal_type
 
         user = (
             User.objects
@@ -149,5 +175,308 @@
         reveal_type(user.annotated_user) # N: Revealed type is "Any"
         reveal_type(user.to_attr_groups) # N: Revealed type is "builtins.list[django.contrib.auth.models.Group]"
 
+
+
+-   case: prefetch_related_to_attr_conflict_with_annotate
     installed_apps:
         - django.contrib.auth
+        - django.contrib.contenttypes
+    main: |
+        from django.db.models import Prefetch, F
+        from django.contrib.auth.models import User, Group
+
+        # When mixing `.annotate(foo=...)` and `prefetch_related(Prefetch(...,to_attr=foo))`
+        # The last annotate in the chain takes precedence (even if it is prior to the prefetch_related)
+        annotate_into_prefetch = (
+            User.objects # E: Attribute "foo" already defined on "django.contrib.auth.models.User@AnnotatedWith[TypedDict({'foo': Any})]"  [no-redef]
+            .annotate(foo=F("username"))
+            .prefetch_related(Prefetch("groups", Group.objects.all(), to_attr="foo"))
+            .get()
+        )
+        prefetch_into_annotate = (
+            User.objects  # E: Attribute "foo" already defined on "django.contrib.auth.models.User@AnnotatedWith[TypedDict({'foo': builtins.list[django.contrib.auth.models.Group]})]"  [no-redef]
+            .prefetch_related(Prefetch("groups", Group.objects.all(), to_attr="foo"))
+            .annotate(foo=F("username"))
+            .get()
+        )
+
+
+-   case: prefetch_related_to_attr_conflict_with_model_attr
+    installed_apps:
+        - myapp
+    main: |
+        from django.db.models import Prefetch, F
+        from myapp.models import Article, Tag
+
+        Article.objects.prefetch_related(Prefetch("tags", Tag.objects.all(), to_attr="pk"))  # E: Attribute "pk" already defined on "myapp.models.Article"  [no-redef]
+        Article.objects.prefetch_related(Prefetch("tags", Tag.objects.all(), to_attr="id"))  # E: Attribute "id" already defined on "myapp.models.Article"  [no-redef]
+        Article.objects.prefetch_related(Prefetch("tags", Tag.objects.all(), to_attr="tags"))  # E: Attribute "tags" already defined on "myapp.models.Article"  [no-redef]
+        Article.objects.prefetch_related(Prefetch("tags", Tag.objects.all(), to_attr="my_property"))  # E: Attribute "my_property" already defined on "myapp.models.Article"  [no-redef]
+        Article.objects.prefetch_related(Prefetch("tags", Tag.objects.all(), to_attr="my_method"))  # E: Attribute "my_method" already defined on "myapp.models.Article"  [no-redef]
+        Article.objects.prefetch_related(Prefetch("tags", Tag.objects.all(), to_attr="my_classmethod"))  # E: Attribute "my_classmethod" already defined on "myapp.models.Article"  [no-redef]
+        Article.objects.prefetch_related(Prefetch("tags", Tag.objects.all(), to_attr="my_staticmethod"))  # E: Attribute "my_staticmethod" already defined on "myapp.models.Article"  [no-redef]
+
+        Tag.objects.prefetch_related(Prefetch("articles", Article.objects.all(), to_attr="articles"))  # E: Attribute "articles" already defined on "myapp.models.Tag"  [no-redef]
+
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+
+                class Tag(models.Model): ...
+                class Article(models.Model):
+                    tags = models.ManyToManyField(to=Tag, related_name="articles", blank=True)
+
+                    @property
+                    def my_property(self) -> int: ...
+
+                    def my_method(self) -> int: ...
+
+                    @staticmethod
+                    def my_staticmethod() -> int: ...
+
+                    @classmethod
+                    def my_classmethod(cls) -> int:  ...
+
+-   case: raw_queryset_prefetch_related_signatures
+    main: |
+        from typing_extensions import reveal_type
+        from myapp.models import Person, Book
+        from django.db.models import Prefetch
+
+        raw_qs = Book.objects.raw("SELECT 1")
+        reveal_type(raw_qs.prefetch_related())  # N: Revealed type is "django.db.models.query.RawQuerySet[myapp.models.Book]"
+        reveal_type(raw_qs.prefetch_related(None))  # N: Revealed type is "django.db.models.query.RawQuerySet[myapp.models.Book]"
+        reveal_type(raw_qs.prefetch_related("author"))  # N: Revealed type is "django.db.models.query.RawQuerySet[myapp.models.Book]"
+        reveal_type(raw_qs.prefetch_related(Prefetch("author")))  # N: Revealed type is "django.db.models.query.RawQuerySet[myapp.models.Book]"
+    installed_apps:
+        - myapp
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                class Person(models.Model): ...
+                class Book(models.Model):
+                    author = models.ForeignKey(Person, on_delete=models.CASCADE)
+
+-   case: prefetch_related_conflicting_prefetches_on_same_attr
+    installed_apps:
+        - django.contrib.auth
+        - django.contrib.contenttypes
+    main: |
+        from django.db.models import Prefetch
+        from django.contrib.auth.models import User, Group
+
+        User.objects.prefetch_related( # E: Attribute "new_attr" already defined on "django.contrib.auth.models.User"  [no-redef]
+           Prefetch("groups", Group.objects.filter(name="test"), to_attr="new_attr"),
+           Prefetch("groups", Group.objects.all(), to_attr="new_attr"),
+        )
+        User.objects.prefetch_related( # E: Attribute "new_attr" already defined on "django.contrib.auth.models.User@AnnotatedWith[TypedDict({'new_attr': builtins.list[django.contrib.auth.models.Group]})]"  [no-redef]
+           Prefetch("groups", Group.objects.all(), to_attr="new_attr"),
+        ).prefetch_related(
+           Prefetch("groups", Group.objects.all(), to_attr="new_attr"),
+        )
+
+# Mostly mirror https://github.com/django/django/blob/0a67611b81567687cd24d2be1c0e390931f06262/tests/prefetch_related/tests.py#L574-L619
+-   case: prefetch_related_ambiguous_prefetches
+    installed_apps:
+        - django.contrib.auth
+        - django.contrib.contenttypes
+    main: |
+        from django.db.models import Prefetch
+        from django.contrib.auth.models import User, Group
+
+        User.objects.prefetch_related("groups", Prefetch("groups")) # Ok
+        User.objects.prefetch_related("groups", "groups__user_set") # Ok
+        User.objects.prefetch_related("groups__user_set", Prefetch("groups", to_attr="groups_lst")) # Ok
+        User.objects.prefetch_related("groups", Prefetch("groups", Group.objects.filter(name="test"), to_attr="another_attr")) # Ok
+
+        User.objects.prefetch_related("groups", Prefetch("groups", Group.objects.filter(name="test"))) # E: Lookup "groups" was already seen with a different queryset  [no-redef]
+        User.objects.prefetch_related(Prefetch("groups"), Prefetch("groups", Group.objects.filter(name="test"))) # E: Lookup "groups" was already seen with a different queryset  [no-redef]
+        User.objects.prefetch_related(Prefetch("groups", Group.objects.filter(name="test")), "groups") # E: Lookup "groups" was already seen with a different queryset  [no-redef]
+
+-   case: prefetch_related_check_valid_lookup
+    main: |
+        from django.db.models import Prefetch, F
+        from myapp.models import Article, Tag, Author, Category
+        from django.contrib.auth.models import User
+
+        Tag.objects.prefetch_related("tagged_items__content_object")
+
+        Article.objects.prefetch_related("tags")
+        Article.objects.prefetch_related("tags__articles")
+        Article.objects.prefetch_related("tags__articles__tags")
+        Article.objects.prefetch_related("related_articles__tags")
+        Article.objects.prefetch_related("subject")
+
+        Author.objects.prefetch_related("article_set")
+        Author.objects.prefetch_related("article_set__tags")
+
+        Article.objects.prefetch_related("xyz") # E: Cannot find "xyz" on "Article" object, "xyz" is an invalid parameter to "prefetch_related()"  [misc]
+        Article.objects.prefetch_related("id") # E: "id" does not resolve to an item that supports prefetching - this is an invalid parameter to "prefetch_related()"  [misc]
+
+        ## M2M -- forward / backward
+        Article.objects.prefetch_related("tags__xyz") # E: Cannot find "xyz" on "Tag" object, "tags__xyz" is an invalid parameter to "prefetch_related()"  [misc]
+        Article.objects.prefetch_related("tags__id") # E: "tags__id" does not resolve to an item that supports prefetching - this is an invalid parameter to "prefetch_related()"  [misc]
+        Tag.objects.prefetch_related("articles__xyz") # E: Cannot find "xyz" on "Article" object, "articles__xyz" is an invalid parameter to "prefetch_related()"  [misc]
+        Tag.objects.prefetch_related("articles__id") # E: "articles__id" does not resolve to an item that supports prefetching - this is an invalid parameter to "prefetch_related()"  [misc]
+
+        ## FK -- forward / backward
+        Article.objects.prefetch_related("author__xyz") # E: Cannot find "xyz" on "Author" object, "author__xyz" is an invalid parameter to "prefetch_related()"  [misc]
+        Author.objects.prefetch_related("article_set__xyz") # E: Cannot find "xyz" on "Article" object, "article_set__xyz" is an invalid parameter to "prefetch_related()"  [misc]
+        Article.objects.prefetch_related("author__id") # E: "author__id" does not resolve to an item that supports prefetching - this is an invalid parameter to "prefetch_related()"  [misc]
+        Author.objects.prefetch_related("article_set__id") # E: "article_set__id" does not resolve to an item that supports prefetching - this is an invalid parameter to "prefetch_related()"  [misc]
+
+        ## OneToOne -- forward / backward
+        Author.objects.prefetch_related("user__xyz") # E: Cannot find "xyz" on "User" object, "user__xyz" is an invalid parameter to "prefetch_related()"  [misc]
+        User.objects.prefetch_related("author_profile__xyz") # E: Cannot find "xyz" on "Author" object, "author_profile__xyz" is an invalid parameter to "prefetch_related()"  [misc]
+        Author.objects.prefetch_related("user__id") # E: "user__id" does not resolve to an item that supports prefetching - this is an invalid parameter to "prefetch_related()"  [misc]
+        User.objects.prefetch_related("author_profile__id") # E: "author_profile__id" does not resolve to an item that supports prefetching - this is an invalid parameter to "prefetch_related()"  [misc]
+
+        ## Generic FK -- forward / backward
+        Article.objects.prefetch_related("subject")
+        # Generic foreign keys can point to any model, so we cannot validate lookups after
+        Article.objects.prefetch_related("subject__xyz")
+        Article.objects.prefetch_related("subject__id")
+
+        ## GenericRelation -- forward / backward
+        Tag.objects.prefetch_related("tagged_items")
+        Category.objects.prefetch_related("tagged_items")
+        Tag.objects.prefetch_related("tagged_items__content_object")
+        Tag.objects.prefetch_related("tagged_items__xyz") # E: Cannot find "xyz" on "TaggedItem" object, "tagged_items__xyz" is an invalid parameter to "prefetch_related()"  [misc]
+        Tag.objects.prefetch_related("tagged_items__id") # E: "tagged_items__id" does not resolve to an item that supports prefetching - this is an invalid parameter to "prefetch_related()"  [misc]
+
+    installed_apps:
+        - myapp
+        - django.contrib.auth
+        - django.contrib.contenttypes
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                from django.contrib.auth.models import User
+                from django.contrib.contenttypes.models import ContentType
+                from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+
+                class Category(models.Model):
+                    tagged_items = GenericRelation('TaggedItem')
+
+                class Tag(models.Model):
+                    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="tags")
+                    tagged_items = GenericRelation('TaggedItem')
+
+                class Author(models.Model):
+                    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="author_profile")
+
+                class TaggedItem(models.Model):
+                    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+                    object_id = models.PositiveIntegerField()
+                    content_object = GenericForeignKey('content_type', 'object_id')
+
+                class Article(models.Model):
+                    author = models.ForeignKey(Author, on_delete=models.CASCADE)
+                    tags = models.ManyToManyField(Tag, related_name="articles", blank=True)
+                    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="articles")
+                    related_articles = models.ManyToManyField("self", related_name="articles", blank=True)
+                    subject_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+                    subject_id = models.PositiveIntegerField()
+                    subject = GenericForeignKey("subject_content_type", "subject_id")
+
+-   case: django_contrib_contenttypes_generic_prefetch
+    installed_apps:
+        - django.contrib.contenttypes
+        - myapp
+    main: |
+        from django.contrib.contenttypes.prefetch import GenericPrefetch
+        from myapp.models import Bookmark, Animal, TaggedItem
+        from typing_extensions import reveal_type
+
+        # Basic GenericPrefetch usage
+        prefetch = GenericPrefetch(
+            "content_object", [Bookmark.objects.all(), Animal.objects.only("name")]
+        )
+        reveal_type(prefetch)  # N: Revealed type is "django.contrib.contenttypes.prefetch.GenericPrefetch[Literal['content_object'], builtins.list[django.db.models.query.QuerySet[django.db.models.base.Model, django.db.models.base.Model]], builtins.str]"
+
+        # Using GenericPrefetch with prefetch_related
+        qs = TaggedItem.objects.prefetch_related(prefetch).all()
+        reveal_type(qs)  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.TaggedItem, myapp.models.TaggedItem]"
+
+        # GenericPrefetch with to_attr
+        prefetch_with_attr = GenericPrefetch(
+            "content_object",
+            [Bookmark.objects.all(), Animal.objects.only("name")],
+            to_attr="prefetched_object"
+        )
+        qs_with_attr = TaggedItem.objects.prefetch_related(prefetch_with_attr).all()
+        reveal_type(qs_with_attr)  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.TaggedItem@AnnotatedWith[TypedDict({'prefetched_object': builtins.list[Any]})], myapp.models.TaggedItem@AnnotatedWith[TypedDict({'prefetched_object': builtins.list[Any]})]]"
+        reveal_type(qs_with_attr.get().prefetched_object)  # N: Revealed type is "builtins.list[Any]"
+
+        # GenericPrefetch on invalid field (not a GenericForeignKey)
+        regular_fk_prefetch = GenericPrefetch(
+            "content_type",
+            [Bookmark.objects.all(), Animal.objects.only("name")],
+        )
+        TaggedItem.objects.prefetch_related(regular_fk_prefetch).all() # E: "content_type" on "TaggedItem" is not a GenericForeignKey, GenericPrefetch can only be used with GenericForeignKey fields  [misc]
+        regular_field_prefetch = GenericPrefetch(
+            "tag",
+            [Bookmark.objects.all(), Animal.objects.only("name")],
+        )
+        TaggedItem.objects.prefetch_related(regular_field_prefetch).all() # E: "tag" on "TaggedItem" is not a GenericForeignKey, GenericPrefetch can only be used with GenericForeignKey fields  [misc]
+
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+                from django.contrib.contenttypes.models import ContentType
+                from django.contrib.contenttypes.fields import GenericForeignKey
+
+                class Bookmark(models.Model):
+                    url = models.URLField()
+
+                class Animal(models.Model):
+                    name = models.CharField(max_length=100)
+
+                class TaggedItem(models.Model):
+                    tag = models.CharField(max_length=100)
+                    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+                    object_id = models.PositiveIntegerField()
+                    content_object = GenericForeignKey('content_type', 'object_id')
+
+
+-   case: uninstalled_django_contrib_contenttypes_generic_prefetch
+    installed_apps:
+        - myapp
+    main: |
+        from django.contrib.contenttypes.prefetch import GenericPrefetch
+        from myapp.models import Bookmark, Animal, TaggedItem
+        from typing_extensions import reveal_type
+
+        # Basic GenericPrefetch usage
+        prefetch = GenericPrefetch(
+            "content_object", [Bookmark.objects.all(), Animal.objects.only("name")]
+        )
+        reveal_type(prefetch)  # N: Revealed type is "django.contrib.contenttypes.prefetch.GenericPrefetch[Literal['content_object'], builtins.list[django.db.models.query.QuerySet[django.db.models.base.Model, django.db.models.base.Model]], builtins.str]"
+
+        # Using GenericPrefetch with prefetch_related
+        qs = TaggedItem.objects.prefetch_related(prefetch).all() # E: Cannot find "content_object" on "TaggedItem" object, "content_object" is an invalid parameter to "prefetch_related()"  [misc]
+        reveal_type(qs)  # N: Revealed type is "django.db.models.query.QuerySet[myapp.models.TaggedItem, myapp.models.TaggedItem]"
+
+
+    files:
+        -   path: myapp/__init__.py
+        -   path: myapp/models.py
+            content: |
+                from django.db import models
+
+                class Bookmark(models.Model):
+                    url = models.URLField()
+
+                class Animal(models.Model):
+                    name = models.CharField(max_length=100)
+
+                class TaggedItem(models.Model):
+                    tag = models.CharField(max_length=100)

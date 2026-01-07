@@ -17,6 +17,7 @@ BASE_MANAGER_CLASS_FULLNAME = "django.db.models.manager.BaseManager"
 MANAGER_CLASS_FULLNAME = "django.db.models.manager.Manager"
 RELATED_MANAGER_CLASS = "django.db.models.fields.related_descriptors.RelatedManager"
 PREFETCH_CLASS_FULLNAME = "django.db.models.query.Prefetch"
+GENERIC_PREFETCH_CLASS_FULLNAME = "django.contrib.contenttypes.prefetch.GenericPrefetch"
 
 CHOICES_CLASS_FULLNAME = "django.db.models.enums.Choices"
 CHOICES_TYPE_METACLASS_FULLNAME = "django.db.models.enums.ChoicesType"
@@ -56,7 +57,7 @@ COMBINABLE_EXPRESSION_FULLNAME = "django.db.models.expressions.Combinable"
 F_EXPRESSION_FULLNAME = "django.db.models.expressions.F"
 
 ANY_ATTR_ALLOWED_CLASS_FULLNAME = "django_stubs_ext.AnyAttrAllowed"
-
+TYPED_MODEL_META_FULLNAME = "django_stubs_ext.db.models.TypedModelMeta"
 STR_PROMISE_FULLNAME = "django.utils.functional._StrPromise"
 
 OBJECT_DOES_NOT_EXIST = "django.core.exceptions.ObjectDoesNotExist"
